@@ -4,19 +4,19 @@ We should basically provide a database and additionally functionality of workflo
 
 The frontend should live in frontends/karaoke and it maintain a database of karaoke videos and allow:
 
-- F3 Fetching/Searching videos using yt-dlp:
+- *IMPLEMENTED* F3 Fetching/Searching videos using yt-dlp:
   - Display search results, and allow fetching the original music video.
 
-- F4 Fetching/Searching lyrics files based on libLrc.
+- *IMPLEMENTED* F4 Fetching/Searching lyrics files based on libLrc.
   - Map them to the metadata containing the video.
 
-- F5 Store derived audio files from running demucs:
+- *IMPLEMENTED* F5 Store derived audio files from running demucs:
   - Vocals, everything minus vocals.
 
 - F6 Render the lyrics on the downloaded video (no sound):
   - Follow the logic of workflows/karaoke/remove_vocals.py
 
-- F7 Download videos for export:
+- *IMPLEMENTED* F7 Download videos for export:
   - With % of vocals mixed in (again follow workflows/karaoke/remove_vocals.py)
 
 
