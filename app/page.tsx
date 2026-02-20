@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { searchVideos, listSongs, addSong, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl } from "@/lib/api";
+import { searchVideos, listSongs, addSong, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail } from "@/lib/api";
 import { SearchResults } from "@/components/SearchResults";
 import { SongLibrary } from "@/components/SongLibrary";
 import { LyricsSearchModal } from "@/components/LyricsSearchModal";
@@ -120,6 +120,51 @@ export default function Home() {
     }
   };
 
+  const handleStartOverlay = async (songId: string, romanize: boolean) => {
+    try {
+      await startOverlay(songId, romanize);
+      await loadSongs();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to start overlay");
+    }
+  };
+
+  const handleDeleteOverlay = async (songId: string) => {
+    try {
+      await deleteOverlay(songId);
+      await loadSongs();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to clear overlay");
+    }
+  };
+
+  const handleStartVariants = async (songId: string) => {
+    try {
+      await startVariants(songId);
+      await loadSongs();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to start variant generation");
+    }
+  };
+
+  const handleDeleteVariants = async (songId: string) => {
+    try {
+      await deleteVariants(songId);
+      await loadSongs();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to clear variants");
+    }
+  };
+
+  const handleRegenerateThumbnail = async (songId: string) => {
+    try {
+      await regenerateThumbnail(songId);
+      await loadSongs();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to regenerate thumbnail");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setDeletingIds((prev) => new Set(prev).add(id));
     try {
@@ -178,6 +223,14 @@ export default function Home() {
         onStartExport={handleStartExport}
         onDeleteExport={handleDeleteExport}
         getExportDownloadUrl={getExportDownloadUrl}
+        onStartOverlay={handleStartOverlay}
+        onDeleteOverlay={handleDeleteOverlay}
+        getOverlayDownloadUrl={getOverlayDownloadUrl}
+        onStartVariants={handleStartVariants}
+        onDeleteVariants={handleDeleteVariants}
+        onRegenerateThumbnail={handleRegenerateThumbnail}
+        getVideoUrl={getVideoUrl}
+        getThumbnailUrl={getThumbnailUrl}
         deletingIds={deletingIds}
       />
 

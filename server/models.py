@@ -41,6 +41,14 @@ class Song(BaseModel):
     export_status: str | None = None  # None | "processing" | "ready" | "error"
     export_error: str | None = None
     export_vocal_level: float | None = None
+    export_progress: float | None = None  # 0.0-1.0
+    overlay_filename: str | None = None
+    overlay_status: str | None = None  # None | "processing" | "ready" | "error"
+    overlay_error: str | None = None
+    overlay_progress: float | None = None  # 0.0-1.0
+    variants_status: str | None = None  # None | "processing" | "ready" | "error"
+    variants_error: str | None = None
+    variants_progress: float | None = None  # 0.0-1.0
     created_at: str
     updated_at: str
 
@@ -65,3 +73,7 @@ class SetLyricsRequest(BaseModel):
 
 class ExportRequest(BaseModel):
     vocal_level: float = 0.3  # 0.0 = pure instrumental, 1.0 = full vocals
+
+
+class OverlayRequest(BaseModel):
+    romanize: bool = True  # render romanized text below CJK lyrics

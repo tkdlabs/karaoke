@@ -69,6 +69,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "export_status": "TEXT",
         "export_error": "TEXT",
         "export_vocal_level": "REAL",
+        "overlay_filename": "TEXT",
+        "overlay_status": "TEXT",
+        "overlay_error": "TEXT",
+        "export_progress": "REAL",
+        "overlay_progress": "REAL",
+        "variants_status": "TEXT",
+        "variants_error": "TEXT",
+        "variants_progress": "REAL",
     }
     for col, col_type in new_columns.items():
         if col not in existing:

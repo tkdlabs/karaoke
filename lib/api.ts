@@ -101,3 +101,49 @@ export async function deleteExport(songId: string): Promise<Song> {
 export function getExportDownloadUrl(songId: string): string {
   return `${API_BASE}/api/songs/${songId}/export/download`;
 }
+
+export async function startOverlay(
+  songId: string,
+  romanize: boolean = true
+): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/overlay`, {
+    method: "POST",
+    body: JSON.stringify({ romanize }),
+  });
+}
+
+export async function deleteOverlay(songId: string): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/overlay`, { method: "DELETE" });
+}
+
+export function getOverlayDownloadUrl(songId: string): string {
+  return `${API_BASE}/api/songs/${songId}/overlay/download`;
+}
+
+export function getAudioStemUrl(songId: string, stem: "vocals" | "instrumental"): string {
+  return `${API_BASE}/api/songs/${songId}/audio/${stem}`;
+}
+
+export function getVideoUrl(songId: string, variant: "original" | "overlay"): string {
+  return `${API_BASE}/api/songs/${songId}/video/${variant}`;
+}
+
+export function getThumbnailUrl(songId: string): string {
+  return `${API_BASE}/api/songs/${songId}/thumbnail`;
+}
+
+export async function regenerateThumbnail(songId: string): Promise<void> {
+  await fetchApi(`/api/songs/${songId}/thumbnail`, { method: "POST" });
+}
+
+export function getVariantUrl(songId: string, pitch: number, vocal: number): string {
+  return `${API_BASE}/api/songs/${songId}/variants/${pitch}/${vocal}`;
+}
+
+export async function startVariants(songId: string): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/variants`, { method: "POST" });
+}
+
+export async function deleteVariants(songId: string): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/variants`, { method: "DELETE" });
+}

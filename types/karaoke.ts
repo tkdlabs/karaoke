@@ -28,6 +28,14 @@ export interface Song {
   export_status: "processing" | "ready" | "error" | null;
   export_error: string | null;
   export_vocal_level: number | null;
+  export_progress: number | null;
+  overlay_filename: string | null;
+  overlay_status: "processing" | "ready" | "error" | null;
+  overlay_error: string | null;
+  overlay_progress: number | null;
+  variants_status: "processing" | "ready" | "error" | null;
+  variants_error: string | null;
+  variants_progress: number | null;
   created_at: string;
   updated_at: string;
 }

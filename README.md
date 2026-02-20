@@ -13,7 +13,7 @@ The frontend should live in frontends/karaoke and it maintain a database of kara
 - *IMPLEMENTED* F5 Store derived audio files from running demucs:
   - Vocals, everything minus vocals.
 
-- F6 Render the lyrics on the downloaded video (no sound):
+- *IMPLEMENTED* F6 Render the lyrics on the downloaded video (no sound):
   - Follow the logic of workflows/karaoke/remove_vocals.py
 
 - *IMPLEMENTED* F7 Download videos for export:
@@ -21,5 +21,11 @@ The frontend should live in frontends/karaoke and it maintain a database of kara
 
 
 Additionally the backend should provide streaming API to use by eg. ExoPlayer or MediaPlayer.
-  - F1: Allow to update the backend to mix in vocals at different rates.
-  - F2: On-the-fly pitch change for vocals, and other audio stream, being able to update this while streaming.
+  - *IMPLEMENTED* F1: Streaming endpoint with configurable vocal level (3 presets) and video stream selection (original or lyrics overlay).
+  - *IMPLEMENTED* F2: On-the-fly pitch change (+-3 semitones) for the mixed audio, applied per chunk while streaming.
+
+Android TV client (target Android TV 11):
+
+- Uses the thumbnails and metadata from backend to display a grid display of songs to choose from.
+- Uses the same endpoints via ExoPlayer to play the pre-defined streams (video - lyrics by default), default pitch = 0, default voice config = configurable, but guide as default would be OK.
+- TV remote can change: voice support, pitch, turn on/off lyrics while playing.
