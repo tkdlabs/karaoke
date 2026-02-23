@@ -70,6 +70,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "export_error": "TEXT",
         "export_vocal_level": "REAL",
         "overlay_filename": "TEXT",
+        "overlay_lyrics_filename": "TEXT",
+        "overlay_romanized_filename": "TEXT",
         "overlay_status": "TEXT",
         "overlay_error": "TEXT",
         "export_progress": "REAL",

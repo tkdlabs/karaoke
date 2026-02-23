@@ -51,6 +51,28 @@ def startup():
     VARIANTS_DIR.mkdir(parents=True, exist_ok=True)
     THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Reset any stuck "processing" statuses from a previous interrupted run
+    for song in db.list_songs():
+        updates = {}
+        if song.get("status") == "downloading":
+            updates["status"] = "error"
+            updates["error_message"] = "Interrupted by server restart"
+        if song.get("stems_status") == "processing":
+            updates["stems_status"] = "error"
+            updates["stems_error"] = "Interrupted by server restart"
+        if song.get("overlay_status") == "processing":
+            updates["overlay_status"] = "error"
+            updates["overlay_error"] = "Interrupted by server restart"
+        if song.get("export_status") == "processing":
+            updates["export_status"] = "error"
+            updates["export_error"] = "Interrupted by server restart"
+        if song.get("variants_status") == "processing":
+            updates["variants_status"] = "error"
+            updates["variants_error"] = "Interrupted by server restart"
+        if updates:
+            db.update_song(song["id"], **updates)
+            print(f"Reset stuck processing for {song['id']}: {list(updates.keys())}")
+
 
 @app.get("/api/health")
 def health():
@@ -347,8 +369,8 @@ def delete_export(song_id: str):
 
 
 @app.post("/api/songs/{song_id}/overlay", response_model=Song)
-def start_overlay(song_id: str, req: OverlayRequest = OverlayRequest()):
-    """Render synced lyrics overlay on the video (no audio)."""
+def start_overlay(song_id: str):
+    """Render both lyrics overlay variants (lyrics-only and romanized)."""
     song = db.get_song(song_id)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
@@ -359,17 +381,22 @@ def start_overlay(song_id: str, req: OverlayRequest = OverlayRequest()):
     if song.get("overlay_status") == "processing":
         raise HTTPException(status_code=409, detail="Overlay rendering already in progress")
 
-    overlay_filename = f"{song_id}_overlay.mp4"
+    lyrics_filename = f"{song_id}_overlay_lyrics.mp4"
+    romanized_filename = f"{song_id}_overlay_romanized.mp4"
 
-    # Remove previous overlay file if exists
-    if song.get("overlay_filename"):
-        old_path = OVERLAYS_DIR / song["overlay_filename"]
-        if old_path.exists():
-            old_path.unlink()
+    # Remove previous overlay files if they exist
+    for old_key in ("overlay_filename", "overlay_lyrics_filename", "overlay_romanized_filename"):
+        old_name = song.get(old_key)
+        if old_name:
+            old_path = OVERLAYS_DIR / old_name
+            if old_path.exists():
+                old_path.unlink()
 
     updated = db.update_song(
         song_id,
-        overlay_filename=overlay_filename,
+        overlay_lyrics_filename=lyrics_filename,
+        overlay_romanized_filename=romanized_filename,
+        overlay_filename=None,
         overlay_status="processing",
         overlay_error=None,
         overlay_progress=0.0,
@@ -378,7 +405,7 @@ def start_overlay(song_id: str, req: OverlayRequest = OverlayRequest()):
     thread = threading.Thread(
         target=_overlay_worker,
         args=(song_id, VIDEOS_DIR / song["video_filename"], song["lyrics_synced"],
-              OVERLAYS_DIR / overlay_filename, req.romanize),
+              OVERLAYS_DIR / lyrics_filename, OVERLAYS_DIR / romanized_filename),
         daemon=True,
     )
     thread.start()
@@ -387,20 +414,26 @@ def start_overlay(song_id: str, req: OverlayRequest = OverlayRequest()):
 
 
 @app.get("/api/songs/{song_id}/overlay/download")
-def download_overlay(song_id: str):
-    """Download the rendered overlay video."""
+def download_overlay(song_id: str, variant: str = "lyrics"):
+    """Download the rendered overlay video (lyrics or romanized)."""
+    if variant not in ("lyrics", "romanized"):
+        raise HTTPException(status_code=400, detail="Variant must be 'lyrics' or 'romanized'")
     song = db.get_song(song_id)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     if song.get("overlay_status") != "ready":
         raise HTTPException(status_code=400, detail="Overlay not ready")
 
-    overlay_path = OVERLAYS_DIR / song["overlay_filename"]
+    filename_key = f"overlay_{variant}_filename"
+    filename = song.get(filename_key) or song.get("overlay_filename")
+    if not filename:
+        raise HTTPException(status_code=404, detail="Overlay file not found")
+    overlay_path = OVERLAYS_DIR / filename
     if not overlay_path.exists():
         raise HTTPException(status_code=404, detail="Overlay file not found")
 
     safe_title = "".join(c for c in (song.get("title") or "overlay") if c.isalnum() or c in " -_").strip()[:80]
-    download_name = f"{safe_title} (lyrics overlay).mp4"
+    download_name = f"{safe_title} (lyrics {variant}).mp4"
 
     return FileResponse(
         path=str(overlay_path),
@@ -411,19 +444,23 @@ def download_overlay(song_id: str):
 
 @app.delete("/api/songs/{song_id}/overlay", response_model=Song)
 def delete_overlay(song_id: str):
-    """Remove the overlay video file."""
+    """Remove all overlay video files."""
     song = db.get_song(song_id)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    if song.get("overlay_filename"):
-        overlay_path = OVERLAYS_DIR / song["overlay_filename"]
-        if overlay_path.exists():
-            overlay_path.unlink()
+    for key in ("overlay_filename", "overlay_lyrics_filename", "overlay_romanized_filename"):
+        filename = song.get(key)
+        if filename:
+            path = OVERLAYS_DIR / filename
+            if path.exists():
+                path.unlink()
 
     updated = db.update_song(
         song_id,
         overlay_filename=None,
+        overlay_lyrics_filename=None,
+        overlay_romanized_filename=None,
         overlay_status=None,
         overlay_error=None,
     )
@@ -553,17 +590,26 @@ def serve_audio_stem(song_id: str, stem: str):
 
 @app.get("/api/songs/{song_id}/video/{variant}")
 def serve_video(song_id: str, variant: str):
-    """Serve a video file (original or overlay), without audio."""
-    if variant not in ("original", "overlay"):
-        raise HTTPException(status_code=400, detail="Variant must be 'original' or 'overlay'")
+    """Serve a video file (original, overlay_lyrics, or overlay_romanized), without audio."""
+    valid = ("original", "overlay", "overlay_lyrics", "overlay_romanized")
+    if variant not in valid:
+        raise HTTPException(status_code=400, detail=f"Variant must be one of {valid}")
     song = db.get_song(song_id)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    if variant == "overlay":
+    if variant in ("overlay", "overlay_lyrics", "overlay_romanized"):
         if song.get("overlay_status") != "ready":
             raise HTTPException(status_code=400, detail="Overlay not ready")
-        path = OVERLAYS_DIR / song["overlay_filename"]
+        # Resolve filename: prefer new split filenames, fall back to legacy single file
+        if variant == "overlay_romanized":
+            filename = song.get("overlay_romanized_filename") or song.get("overlay_filename")
+        else:
+            # "overlay" and "overlay_lyrics" both resolve to lyrics-only
+            filename = song.get("overlay_lyrics_filename") or song.get("overlay_filename")
+        if not filename:
+            raise HTTPException(status_code=404, detail="Overlay file not found")
+        path = OVERLAYS_DIR / filename
     else:
         if song["status"] != "ready":
             raise HTTPException(status_code=400, detail="Video not ready")
@@ -626,18 +672,37 @@ def _make_progress_cb(song_id: str, field: str, interval: float = 2.0):
 
 
 def _overlay_worker(
-    song_id: str, video_path: Path, lyrics_lrc: str, output_path: Path,
-    romanize: bool = True,
+    song_id: str, video_path: Path, lyrics_lrc: str,
+    lyrics_output: Path, romanized_output: Path,
 ) -> None:
-    """Background worker for lyrics overlay rendering."""
+    """Background worker for lyrics overlay rendering (both variants)."""
     try:
-        on_progress = _make_progress_cb(song_id, "overlay_progress")
+        def on_progress(p: float) -> None:
+            # Each variant is half the total progress
+            pass
+
+        # 1) Render lyrics-only (no romanization) — 0-50%
+        progress_lyrics = _make_progress_cb(song_id, "overlay_progress")
+        def lyrics_progress(p: float) -> None:
+            progress_lyrics(p * 0.5)
+
         overlay_mod.create_overlay(
-            video_path, lyrics_lrc, output_path,
-            on_progress=on_progress, romanize=romanize,
+            video_path, lyrics_lrc, lyrics_output,
+            on_progress=lyrics_progress, romanize=False,
         )
+        print(f"Overlay lyrics variant ready: {song_id}")
+
+        # 2) Render romanized — 50-100%
+        def romanized_progress(p: float) -> None:
+            progress_lyrics(0.5 + p * 0.5)
+
+        overlay_mod.create_overlay(
+            video_path, lyrics_lrc, romanized_output,
+            on_progress=romanized_progress, romanize=True,
+        )
+
         db.update_song(song_id, overlay_status="ready", overlay_progress=1.0)
-        print(f"Overlay ready: {song_id}")
+        print(f"Overlay both variants ready: {song_id}")
     except Exception as e:
         db.update_song(song_id, overlay_status="error", overlay_error=str(e)[:500])
         print(f"Overlay failed for {song_id}: {e}")

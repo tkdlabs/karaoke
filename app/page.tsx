@@ -120,9 +120,9 @@ export default function Home() {
     }
   };
 
-  const handleStartOverlay = async (songId: string, romanize: boolean) => {
+  const handleStartOverlay = async (songId: string) => {
     try {
-      await startOverlay(songId, romanize);
+      await startOverlay(songId);
       await loadSongs();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to start overlay");

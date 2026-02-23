@@ -102,14 +102,8 @@ export function getExportDownloadUrl(songId: string): string {
   return `${API_BASE}/api/songs/${songId}/export/download`;
 }
 
-export async function startOverlay(
-  songId: string,
-  romanize: boolean = true
-): Promise<Song> {
-  return fetchApi(`/api/songs/${songId}/overlay`, {
-    method: "POST",
-    body: JSON.stringify({ romanize }),
-  });
+export async function startOverlay(songId: string): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/overlay`, { method: "POST" });
 }
 
 export async function deleteOverlay(songId: string): Promise<Song> {
@@ -124,7 +118,9 @@ export function getAudioStemUrl(songId: string, stem: "vocals" | "instrumental")
   return `${API_BASE}/api/songs/${songId}/audio/${stem}`;
 }
 
-export function getVideoUrl(songId: string, variant: "original" | "overlay"): string {
+export type VideoVariant = "original" | "overlay_lyrics" | "overlay_romanized";
+
+export function getVideoUrl(songId: string, variant: VideoVariant): string {
   return `${API_BASE}/api/songs/${songId}/video/${variant}`;
 }
 

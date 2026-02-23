@@ -42,7 +42,8 @@ class Song(BaseModel):
     export_error: str | None = None
     export_vocal_level: float | None = None
     export_progress: float | None = None  # 0.0-1.0
-    overlay_filename: str | None = None
+    overlay_lyrics_filename: str | None = None
+    overlay_romanized_filename: str | None = None
     overlay_status: str | None = None  # None | "processing" | "ready" | "error"
     overlay_error: str | None = None
     overlay_progress: float | None = None  # 0.0-1.0

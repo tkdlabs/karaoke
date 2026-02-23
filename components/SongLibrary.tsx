@@ -99,13 +99,13 @@ interface SongLibraryProps {
   onStartExport: (songId: string, vocalLevel: number) => void;
   onDeleteExport: (songId: string) => void;
   getExportDownloadUrl: (songId: string) => string;
-  onStartOverlay: (songId: string, romanize: boolean) => void;
+  onStartOverlay: (songId: string) => void;
   onDeleteOverlay: (songId: string) => void;
   getOverlayDownloadUrl: (songId: string) => string;
   onStartVariants: (songId: string) => void;
   onDeleteVariants: (songId: string) => void;
   onRegenerateThumbnail: (songId: string) => void;
-  getVideoUrl: (songId: string, variant: "original" | "overlay") => string;
+  getVideoUrl: (songId: string, variant: "original" | "overlay_lyrics" | "overlay_romanized") => string;
   getThumbnailUrl: (songId: string) => string;
   deletingIds: Set<string>;
 }
@@ -131,8 +131,8 @@ export function SongLibrary({
   deletingIds,
 }: SongLibraryProps) {
   const [vocalLevels, setVocalLevels] = useState<Record<string, number>>({});
-  const [romanizeFlags, setRomanizeFlags] = useState<Record<string, boolean>>({});
-  const [playingSong, setPlayingSong] = useState<{ song: Song; videoVariant: "original" | "overlay" } | null>(null);
+
+  const [playingSong, setPlayingSong] = useState<{ song: Song; videoVariant: "original" | "overlay_lyrics" | "overlay_romanized" } | null>(null);
 
   if (songs.length === 0) {
     return (
@@ -337,22 +337,8 @@ export function SongLibrary({
                 {/* Overlay row */}
                 {canOverlay && (
                   <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-gray-700">
-                    <label className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={romanizeFlags[song.id] ?? true}
-                        onChange={(e) =>
-                          setRomanizeFlags((prev) => ({
-                            ...prev,
-                            [song.id]: e.target.checked,
-                          }))
-                        }
-                        className="accent-indigo-500"
-                      />
-                      Romanize
-                    </label>
                     <button
-                      onClick={() => onStartOverlay(song.id, romanizeFlags[song.id] ?? true)}
+                      onClick={() => onStartOverlay(song.id)}
                       disabled={song.overlay_status === "processing"}
                       className="px-2 py-1 text-xs bg-indigo-900 hover:bg-indigo-800 rounded disabled:opacity-40 shrink-0"
                     >
@@ -402,28 +388,41 @@ export function SongLibrary({
                     )}
                     {song.variants_status === "ready" && (
                       <>
-                        <button
-                          onClick={() =>
-                            setPlayingSong({
-                              song,
-                              videoVariant: song.overlay_status === "ready" ? "overlay" : "original",
-                            })
-                          }
-                          className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 rounded shrink-0"
-                        >
-                          Play
-                        </button>
-                        {song.overlay_status === "ready" && (
+                        {song.overlay_status === "ready" ? (
+                          <>
+                            <button
+                              onClick={() =>
+                                setPlayingSong({ song, videoVariant: "overlay_romanized" })
+                              }
+                              className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 rounded shrink-0"
+                            >
+                              Play (romanized)
+                            </button>
+                            <button
+                              onClick={() =>
+                                setPlayingSong({ song, videoVariant: "overlay_lyrics" })
+                              }
+                              className="px-2 py-1 text-xs bg-green-800 hover:bg-green-700 rounded shrink-0"
+                            >
+                              Play (lyrics)
+                            </button>
+                            <button
+                              onClick={() =>
+                                setPlayingSong({ song, videoVariant: "original" })
+                              }
+                              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded shrink-0"
+                            >
+                              Play (no lyrics)
+                            </button>
+                          </>
+                        ) : (
                           <button
                             onClick={() =>
-                              setPlayingSong({
-                                song,
-                                videoVariant: "original",
-                              })
+                              setPlayingSong({ song, videoVariant: "original" })
                             }
-                            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded shrink-0"
+                            className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 rounded shrink-0"
                           >
-                            Play (no lyrics)
+                            Play
                           </button>
                         )}
                         <button

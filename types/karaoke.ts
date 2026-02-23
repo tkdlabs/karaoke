@@ -29,7 +29,8 @@ export interface Song {
   export_error: string | null;
   export_vocal_level: number | null;
   export_progress: number | null;
-  overlay_filename: string | null;
+  overlay_lyrics_filename: string | null;
+  overlay_romanized_filename: string | null;
   overlay_status: "processing" | "ready" | "error" | null;
   overlay_error: string | null;
   overlay_progress: number | null;
