@@ -95,7 +95,7 @@ interface SongLibraryProps {
   onDelete: (id: string) => void;
   onLyricsSearch: (song: Song) => void;
   onLyricsDelete: (songId: string) => void;
-  onStartStems: (songId: string, eqMatch: boolean) => void;
+  onStartStems: (songId: string, opts: { eq_match: boolean; exciter: boolean }) => void;
   onDeleteStems: (songId: string) => void;
   onStartExport: (songId: string, vocalLevel: number) => void;
   onDeleteExport: (songId: string) => void;
@@ -103,7 +103,7 @@ interface SongLibraryProps {
   onStartOverlay: (songId: string) => void;
   onDeleteOverlay: (songId: string) => void;
   getOverlayDownloadUrl: (songId: string) => string;
-  onStartVariants: (songId: string, eqMatch: boolean) => void;
+  onStartVariants: (songId: string, opts: { eq_match: boolean; exciter: boolean }) => void;
   onDeleteVariants: (songId: string) => void;
   onRegenerateThumbnail: (songId: string) => void;
   getVideoUrl: (songId: string, variant: "original" | "overlay_lyrics" | "overlay_romanized") => string;
@@ -137,6 +137,7 @@ export function SongLibrary({
   const [playingSong, setPlayingSong] = useState<{ song: Song; videoVariant: "original" | "overlay_lyrics" | "overlay_romanized" } | null>(null);
   const [editingLyricsSong, setEditingLyricsSong] = useState<Song | null>(null);
   const [eqMatchFlags, setEqMatchFlags] = useState<Record<string, boolean>>({});
+  const [exciterFlags, setExciterFlags] = useState<Record<string, boolean>>({});
 
   if (songs.length === 0) {
     return (
@@ -265,7 +266,7 @@ export function SongLibrary({
                   {song.stems_status !== "ready" && (
                     <>
                       <button
-                        onClick={() => onStartStems(song.id, eqMatchFlags[song.id] ?? false)}
+                        onClick={() => onStartStems(song.id, { eq_match: eqMatchFlags[song.id] ?? false, exciter: exciterFlags[song.id] ?? false })}
                         disabled={!isReady || song.stems_status === "processing"}
                         className="px-2 py-1 text-xs bg-teal-900 hover:bg-teal-800 rounded disabled:opacity-40"
                       >
@@ -276,17 +277,30 @@ export function SongLibrary({
                             : "Separate"}
                       </button>
                       {song.stems_status !== "processing" && isReady && (
-                        <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={eqMatchFlags[song.id] ?? false}
-                            onChange={(e) =>
-                              setEqMatchFlags((f) => ({ ...f, [song.id]: e.target.checked }))
-                            }
-                            className="accent-teal-500"
-                          />
-                          EQ match
-                        </label>
+                        <>
+                          <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={eqMatchFlags[song.id] ?? false}
+                              onChange={(e) =>
+                                setEqMatchFlags((f) => ({ ...f, [song.id]: e.target.checked }))
+                              }
+                              className="accent-teal-500"
+                            />
+                            EQ match
+                          </label>
+                          <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={exciterFlags[song.id] ?? false}
+                              onChange={(e) =>
+                                setExciterFlags((f) => ({ ...f, [song.id]: e.target.checked }))
+                              }
+                              className="accent-teal-500"
+                            />
+                            Exciter
+                          </label>
+                        </>
                       )}
                     </>
                   )}
@@ -402,7 +416,7 @@ export function SongLibrary({
                   <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-gray-700">
                     {song.variants_status !== "ready" && (
                       <button
-                        onClick={() => onStartVariants(song.id, eqMatchFlags[song.id] ?? false)}
+                        onClick={() => onStartVariants(song.id, { eq_match: eqMatchFlags[song.id] ?? false, exciter: exciterFlags[song.id] ?? false })}
                         disabled={song.variants_status === "processing"}
                         className="px-2 py-1 text-xs bg-sky-900 hover:bg-sky-800 rounded disabled:opacity-40 shrink-0"
                       >
@@ -461,17 +475,30 @@ export function SongLibrary({
                       </>
                     )}
                     {song.variants_status !== "processing" && (
-                      <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none shrink-0 ml-1">
-                        <input
-                          type="checkbox"
-                          checked={eqMatchFlags[song.id] ?? false}
-                          onChange={(e) =>
-                            setEqMatchFlags((f) => ({ ...f, [song.id]: e.target.checked }))
-                          }
-                          className="accent-sky-500"
-                        />
-                        EQ match
-                      </label>
+                      <>
+                        <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none shrink-0 ml-1">
+                          <input
+                            type="checkbox"
+                            checked={eqMatchFlags[song.id] ?? false}
+                            onChange={(e) =>
+                              setEqMatchFlags((f) => ({ ...f, [song.id]: e.target.checked }))
+                            }
+                            className="accent-sky-500"
+                          />
+                          EQ match
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none shrink-0 ml-1">
+                          <input
+                            type="checkbox"
+                            checked={exciterFlags[song.id] ?? false}
+                            onChange={(e) =>
+                              setExciterFlags((f) => ({ ...f, [song.id]: e.target.checked }))
+                            }
+                            className="accent-sky-500"
+                          />
+                          Exciter
+                        </label>
+                      </>
                     )}
                   </div>
                 )}

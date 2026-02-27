@@ -86,4 +86,5 @@ class OverlayRequest(BaseModel):
 
 
 class VariantsRequest(BaseModel):
-    eq_match: bool = False  # apply EQ to instrumental tracks to match the original full-mix frequency response
+    eq_match: bool = False  # frequency-dependent EQ correction (gentle in vocal range, stronger in bass/treble)
+    exciter: bool = False  # apply harmonic exciter to restore brightness lost during vocal removal

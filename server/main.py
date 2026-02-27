@@ -320,6 +320,7 @@ def start_stems(song_id: str, req: VariantsRequest = VariantsRequest()):
             AUDIO_DIR / vocals_filename,
             AUDIO_DIR / instrumental_filename,
             req.eq_match,
+            req.exciter,
         ),
         daemon=True,
     )
@@ -568,6 +569,22 @@ def delete_overlay(song_id: str):
 _EQ_BANDS_HZ = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 _EQ_MAX_GAIN_DB = 12.0
 
+# Per-band correction strength for frequency-dependent EQ matching.
+# Vocals mostly occupy 300 Hz–4 kHz, so spectral holes there are expected after
+# vocal removal — we correct very lightly.  Outside that range the losses are
+# artifacts of the separation process and we can correct more aggressively.
+_EQ_BAND_STRENGTH: dict[int, float] = {
+    63: 0.5,  # sub-bass — vocals don't live here, losses are artifacts
+    125: 0.45,  # bass
+    250: 0.35,  # upper bass / low-mid transition
+    500: 0.12,  # low-mid — vocal fundamental range starts
+    1000: 0.10,  # mid — vocal core
+    2000: 0.10,  # upper-mid — vocal presence
+    4000: 0.30,  # presence — sibilance removed, partial restore
+    8000: 0.40,  # brilliance — breath/air removed by separation
+    16000: 0.45,  # air — high-freq artifacts from separation
+}
+
 
 def _read_pcm_mono(path: Path, sample_rate: int = 22050) -> "np.ndarray":
     """Decode audio to a mono float32 numpy array via ffmpeg."""
@@ -599,7 +616,9 @@ def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
     """Measure per-band gain difference between original and instrumental, return ffmpeg filter string.
 
     Uses 10-second FFT chunks averaged over the whole file.  For each octave-band
-    centre frequency the correction is clamped to ±_EQ_MAX_GAIN_DB dB.
+    centre frequency the raw correction is scaled by _EQ_BAND_STRENGTH (low in the
+    vocal range where spectral holes are expected, higher in bass/treble where losses
+    are separation artifacts) then clamped to ±_EQ_MAX_GAIN_DB dB.
     Returns an empty string if numpy is unavailable or analysis fails.
     """
     try:
@@ -642,6 +661,7 @@ def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
             if o_band < 1e-12 or i_band < 1e-12:
                 continue
             gain_db = 10.0 * np.log10(o_band / i_band)
+            gain_db = gain_db * _EQ_BAND_STRENGTH.get(hz, 0.2)
             gain_db = max(-_EQ_MAX_GAIN_DB, min(_EQ_MAX_GAIN_DB, gain_db))
             if abs(gain_db) >= 0.5:
                 parts.append(f"equalizer=f={hz}:width_type=o:width=1:g={gain_db:.1f}")
@@ -670,6 +690,17 @@ def _build_pitch_filter(semitones: float, sample_rate: int = 44100) -> str:
         f",aresample={sample_rate}"
         f",atempo={tempo:.6f}"
     )
+
+
+def _build_exciter_filter() -> str:
+    """Build an ffmpeg aexciter filter to restore brightness lost during vocal removal.
+
+    Generates harmonics above the cutoff frequency with moderate drive and blend
+    to add perceived air/presence without the artificial feel of static EQ boosting.
+    Parameters: freq=4000 (process above 4 kHz), drive=4 (moderate harmonic generation),
+    blend=2 (mix harmonics into output), amount=2 (subtle effect level).
+    """
+    return "aexciter=freq=4000:drive=4:blend=2:amount=2"
 
 
 @app.post("/api/songs/{song_id}/variants", response_model=Song)
@@ -707,6 +738,7 @@ def start_variants(song_id: str, req: VariantsRequest = VariantsRequest()):
             VIDEOS_DIR / song["video_filename"],
             variants_dir,
             req.eq_match,
+            req.exciter,
         ),
         daemon=True,
     )
@@ -954,6 +986,7 @@ def _variants_worker(
     original_path: Path,
     output_dir: Path,
     eq_match: bool = False,
+    exciter: bool = False,
 ) -> None:
     """Background worker to pre-generate all audio variants (pitch × vocal level)."""
     import subprocess as _sp
@@ -965,9 +998,15 @@ def _variants_worker(
     # Pre-compute the EQ correction filter once for this song (applied to non-100% vocal variants)
     eq_filter = ""
     if eq_match:
-        print(f"Computing EQ correction for {song_id}...")
+        print(f"Computing frequency-dependent EQ correction for {song_id}...")
         eq_filter = _compute_eq_filter(original_path, instrumental_path)
         print(f"EQ filter: {eq_filter or '(none)'}")
+
+    # Harmonic exciter filter for restoring brightness
+    exciter_filter = ""
+    if exciter:
+        exciter_filter = _build_exciter_filter()
+        print(f"Exciter filter: {exciter_filter}")
 
     try:
         for i, (pitch, vocal) in enumerate(combos):
@@ -976,9 +1015,16 @@ def _variants_worker(
 
             pitch_filter = _build_pitch_filter(pitch)
 
-            # Apply EQ to the instrumental when vocals are reduced (not full original mix)
+            # Build instrumental processing chain (EQ + exciter applied when vocals are reduced)
+            inst_filters = []
             if eq_filter and vocal < 100:
-                inst_chain = f"[0:a]{eq_filter}[inst_eq];[inst_eq]"
+                inst_filters.append(eq_filter)
+            if exciter_filter and vocal < 100:
+                inst_filters.append(exciter_filter)
+
+            if inst_filters:
+                combined = ",".join(inst_filters)
+                inst_chain = f"[0:a]{combined}[inst_proc];[inst_proc]"
             else:
                 inst_chain = "[0:a]"
 
@@ -1025,6 +1071,7 @@ def _stems_worker(
     vocals_out: Path,
     instrumental_out: Path,
     eq_match: bool = False,
+    exciter: bool = False,
 ) -> None:
     """Background worker for Demucs stem separation."""
     try:
@@ -1037,7 +1084,13 @@ def _stems_worker(
         variants_dir.mkdir(parents=True, exist_ok=True)
         db.update_song(song_id, variants_status="processing", variants_progress=0.0)
         _variants_worker(
-            song_id, vocals_out, instrumental_out, video_path, variants_dir, eq_match
+            song_id,
+            vocals_out,
+            instrumental_out,
+            video_path,
+            variants_dir,
+            eq_match,
+            exciter,
         )
     except Exception as e:
         db.update_song(song_id, stems_status="error", stems_error=str(e)[:500])
