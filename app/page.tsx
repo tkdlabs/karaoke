@@ -232,6 +232,7 @@ export default function Home() {
         getVideoUrl={getVideoUrl}
         getThumbnailUrl={getThumbnailUrl}
         deletingIds={deletingIds}
+        onSongsRefresh={loadSongs}
       />
 
       {/* Lyrics Search Modal */}

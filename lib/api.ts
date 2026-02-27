@@ -4,9 +4,14 @@ import type {
   AddSongRequest,
   LyricsSearchResult,
   SetLyricsRequest,
+  AdjustLyricsRequest,
 } from "@/types/karaoke";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8001`
+    : "http://localhost:8001");
 
 async function fetchApi<T>(
   endpoint: string,
@@ -142,4 +147,18 @@ export async function startVariants(songId: string): Promise<Song> {
 
 export async function deleteVariants(songId: string): Promise<Song> {
   return fetchApi(`/api/songs/${songId}/variants`, { method: "DELETE" });
+}
+
+export async function adjustLyricsOffset(
+  songId: string,
+  anchorTime: number,
+  anchorLineIndex: number
+): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/lyrics/adjust`, {
+    method: "PUT",
+    body: JSON.stringify({
+      anchor_time: anchorTime,
+      anchor_line_index: anchorLineIndex,
+    } satisfies AdjustLyricsRequest),
+  });
 }

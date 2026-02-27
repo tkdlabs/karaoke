@@ -72,6 +72,11 @@ class SetLyricsRequest(BaseModel):
     source: str  # e.g. "lrclib:12345" or "manual"
 
 
+class AdjustLyricsRequest(BaseModel):
+    anchor_time: float  # new timestamp in seconds for the anchor line
+    anchor_line_index: int  # 0-based index of the lyric line to anchor
+
+
 class ExportRequest(BaseModel):
     vocal_level: float = 0.3  # 0.0 = pure instrumental, 1.0 = full vocals
 

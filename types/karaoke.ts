@@ -66,3 +66,8 @@ export interface SetLyricsRequest {
   plain_lyrics: string | null;
   source: string;
 }
+
+export interface AdjustLyricsRequest {
+  anchor_time: number;
+  anchor_line_index: number;
+}

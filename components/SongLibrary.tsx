@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Song } from "@/types/karaoke";
 import { SongPlayer } from "./SongPlayer";
+import { LyricsEditor } from "./LyricsEditor";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "--:--";
@@ -108,6 +109,7 @@ interface SongLibraryProps {
   getVideoUrl: (songId: string, variant: "original" | "overlay_lyrics" | "overlay_romanized") => string;
   getThumbnailUrl: (songId: string) => string;
   deletingIds: Set<string>;
+  onSongsRefresh: () => void;
 }
 
 export function SongLibrary({
@@ -129,10 +131,12 @@ export function SongLibrary({
   getVideoUrl,
   getThumbnailUrl,
   deletingIds,
+  onSongsRefresh,
 }: SongLibraryProps) {
   const [vocalLevels, setVocalLevels] = useState<Record<string, number>>({});
 
   const [playingSong, setPlayingSong] = useState<{ song: Song; videoVariant: "original" | "overlay_lyrics" | "overlay_romanized" } | null>(null);
+  const [editingLyricsSong, setEditingLyricsSong] = useState<Song | null>(null);
 
   if (songs.length === 0) {
     return (
@@ -242,6 +246,14 @@ export function SongLibrary({
                   >
                     {hasLyrics ? "Re-search Lyrics" : "Search Lyrics"}
                   </button>
+                  {hasSyncedLyrics && isReady && (
+                    <button
+                      onClick={() => setEditingLyricsSong(song)}
+                      className="px-2 py-1 text-xs bg-violet-900 hover:bg-violet-800 rounded"
+                    >
+                      Edit Lyrics
+                    </button>
+                  )}
                   {hasLyrics && (
                     <button
                       onClick={() => onLyricsDelete(song.id)}
@@ -474,6 +486,17 @@ export function SongLibrary({
           duration={playingSong.song.duration || 0}
           title={playingSong.song.title}
           onClose={() => setPlayingSong(null)}
+        />
+      )}
+
+      {editingLyricsSong && editingLyricsSong.lyrics_synced && (
+        <LyricsEditor
+          songId={editingLyricsSong.id}
+          title={editingLyricsSong.title}
+          duration={editingLyricsSong.duration || 0}
+          lyricsSynced={editingLyricsSong.lyrics_synced}
+          onClose={() => setEditingLyricsSong(null)}
+          onSaved={onSongsRefresh}
         />
       )}
     </div>

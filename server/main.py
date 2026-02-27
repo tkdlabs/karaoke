@@ -16,7 +16,9 @@ import export as export_mod
 import overlay as overlay_mod
 import lrclib
 import ytdlp
-from models import AddSongRequest, ExportRequest, LyricsSearchResult, OverlayRequest, SetLyricsRequest, Song, SearchResult
+import re
+
+from models import AddSongRequest, AdjustLyricsRequest, ExportRequest, LyricsSearchResult, OverlayRequest, SetLyricsRequest, Song, SearchResult
 
 app = FastAPI(title="Karaoke API", version="0.1.0")
 
@@ -199,6 +201,61 @@ def set_song_lyrics(song_id: str, req: SetLyricsRequest):
         lyrics_plain=req.plain_lyrics,
         lyrics_source=req.source,
     )
+    return updated
+
+
+@app.put("/api/songs/{song_id}/lyrics/adjust", response_model=Song)
+def adjust_song_lyrics(song_id: str, req: AdjustLyricsRequest):
+    """Adjust synced lyrics timestamps so the anchor line matches the given time.
+
+    All other timestamps are shifted by the same offset (clamped to >= 0).
+    """
+    song = db.get_song(song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    if not song.get("lyrics_synced"):
+        raise HTTPException(status_code=400, detail="Song has no synced lyrics")
+
+    lrc = song["lyrics_synced"]
+    timestamp_re = re.compile(r"\[(\d{2}):(\d{2})\.(\d{2})\]")
+
+    # Collect all timestamped lines to find the anchor
+    timestamped_lines: list[float] = []
+    for line in lrc.splitlines():
+        m = timestamp_re.match(line)
+        if m:
+            t = int(m.group(1)) * 60 + int(m.group(2)) + int(m.group(3)) / 100
+            timestamped_lines.append(t)
+
+    if not timestamped_lines:
+        raise HTTPException(status_code=400, detail="No timestamped lyric lines found")
+    if req.anchor_line_index < 0 or req.anchor_line_index >= len(timestamped_lines):
+        raise HTTPException(status_code=400, detail="anchor_line_index out of range")
+
+    old_time = timestamped_lines[req.anchor_line_index]
+    offset = req.anchor_time - old_time
+
+    # Only shift the anchor line and everything after it
+    line_counter = 0
+
+    def shift_timestamp(m: re.Match) -> str:
+        nonlocal line_counter
+        idx = line_counter
+        line_counter += 1
+        mins, secs, centis = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        total = mins * 60 + secs + centis / 100
+        if idx >= req.anchor_line_index:
+            total += offset
+        total = max(0, total)
+        new_mins = int(total // 60)
+        new_secs = total % 60
+        whole_secs = int(new_secs)
+        centisecs = int(round((new_secs - whole_secs) * 100))
+        return f"[{new_mins:02d}:{whole_secs:02d}.{centisecs:02d}]"
+
+    adjusted = timestamp_re.sub(shift_timestamp, lrc)
+
+    updated = db.update_song(song_id, lyrics_synced=adjusted)
     return updated
 
 
