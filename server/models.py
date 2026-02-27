@@ -77,3 +77,7 @@ class ExportRequest(BaseModel):
 
 class OverlayRequest(BaseModel):
     romanize: bool = True  # render romanized text below CJK lyrics
+
+
+class VariantsRequest(BaseModel):
+    eq_match: bool = False  # apply EQ to instrumental tracks to match the original full-mix frequency response

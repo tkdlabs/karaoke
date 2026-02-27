@@ -84,9 +84,9 @@ export default function Home() {
     }
   };
 
-  const handleStartStems = async (songId: string) => {
+  const handleStartStems = async (songId: string, eqMatch: boolean) => {
     try {
-      await startStems(songId);
+      await startStems(songId, eqMatch);
       await loadSongs();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to start separation");
@@ -138,9 +138,9 @@ export default function Home() {
     }
   };
 
-  const handleStartVariants = async (songId: string) => {
+  const handleStartVariants = async (songId: string, eqMatch: boolean) => {
     try {
-      await startVariants(songId);
+      await startVariants(songId, eqMatch);
       await loadSongs();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to start variant generation");

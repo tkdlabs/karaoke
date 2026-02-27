@@ -76,8 +76,11 @@ export async function deleteSongLyrics(songId: string): Promise<Song> {
   return fetchApi(`/api/songs/${songId}/lyrics`, { method: "DELETE" });
 }
 
-export async function startStems(songId: string): Promise<Song> {
-  return fetchApi(`/api/songs/${songId}/stems`, { method: "POST" });
+export async function startStems(songId: string, eqMatch: boolean = false): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/stems`, {
+    method: "POST",
+    body: JSON.stringify({ eq_match: eqMatch }),
+  });
 }
 
 export async function deleteStems(songId: string): Promise<Song> {
@@ -140,8 +143,11 @@ export function getVariantUrl(songId: string, pitch: number, vocal: number): str
   return `${API_BASE}/api/songs/${songId}/variants/${pitch}/${vocal}`;
 }
 
-export async function startVariants(songId: string): Promise<Song> {
-  return fetchApi(`/api/songs/${songId}/variants`, { method: "POST" });
+export async function startVariants(songId: string, eqMatch: boolean = false): Promise<Song> {
+  return fetchApi(`/api/songs/${songId}/variants`, {
+    method: "POST",
+    body: JSON.stringify({ eq_match: eqMatch }),
+  });
 }
 
 export async function deleteVariants(songId: string): Promise<Song> {

@@ -16,7 +16,7 @@ import export as export_mod
 import overlay as overlay_mod
 import lrclib
 import ytdlp
-from models import AddSongRequest, ExportRequest, LyricsSearchResult, OverlayRequest, SetLyricsRequest, Song, SearchResult
+from models import AddSongRequest, ExportRequest, LyricsSearchResult, OverlayRequest, SetLyricsRequest, Song, SearchResult, VariantsRequest
 
 app = FastAPI(title="Karaoke API", version="0.1.0")
 
@@ -197,7 +197,7 @@ def delete_song_lyrics(song_id: str):
 
 
 @app.post("/api/songs/{song_id}/stems", response_model=Song)
-def start_stems(song_id: str):
+def start_stems(song_id: str, req: VariantsRequest = VariantsRequest()):
     """Run Demucs stem separation in the background."""
     song = db.get_song(song_id)
     if not song:
@@ -221,7 +221,7 @@ def start_stems(song_id: str):
     video_path = VIDEOS_DIR / song["video_filename"]
     thread = threading.Thread(
         target=_stems_worker,
-        args=(song_id, video_path, AUDIO_DIR / vocals_filename, AUDIO_DIR / instrumental_filename),
+        args=(song_id, video_path, AUDIO_DIR / vocals_filename, AUDIO_DIR / instrumental_filename, req.eq_match),
         daemon=True,
     )
     thread.start()
@@ -430,6 +430,83 @@ def delete_overlay(song_id: str):
     return updated
 
 
+_EQ_BANDS_HZ = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+_EQ_MAX_GAIN_DB = 12.0
+
+
+def _read_pcm_mono(path: Path, sample_rate: int = 22050) -> "np.ndarray":
+  """Decode audio to a mono float32 numpy array via ffmpeg."""
+  import numpy as np
+  import subprocess as _sp
+
+  cmd = [
+    "ffmpeg", "-y", "-i", str(path),
+    "-ac", "1", "-ar", str(sample_rate),
+    "-f", "f32le", "pipe:1",
+  ]
+  result = _sp.run(cmd, capture_output=True, timeout=300)
+  if result.returncode != 0:
+    raise RuntimeError(f"PCM decode failed: {result.stderr.decode(errors='replace')[-200:]}")
+  return np.frombuffer(result.stdout, dtype=np.float32)
+
+
+def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
+  """Measure per-band gain difference between original and instrumental, return ffmpeg filter string.
+
+  Uses 10-second FFT chunks averaged over the whole file.  For each octave-band
+  centre frequency the correction is clamped to ±_EQ_MAX_GAIN_DB dB.
+  Returns an empty string if numpy is unavailable or analysis fails.
+  """
+  try:
+    import numpy as np
+  except ImportError:
+    return ""
+
+  try:
+    sr = 22050
+    orig = _read_pcm_mono(original_path, sr)
+    inst = _read_pcm_mono(instrumental_path, sr)
+
+    length = min(len(orig), len(inst))
+    orig = orig[:length]
+    inst = inst[:length]
+
+    chunk = sr * 10
+    n_chunks = max(1, length // chunk)
+    half = chunk // 2 + 1
+    orig_pwr = np.zeros(half)
+    inst_pwr = np.zeros(half)
+
+    for k in range(n_chunks):
+      o = orig[k * chunk:(k + 1) * chunk]
+      i = inst[k * chunk:(k + 1) * chunk]
+      if len(o) < chunk:
+        o = np.pad(o, (0, chunk - len(o)))
+        i = np.pad(i, (0, chunk - len(i)))
+      orig_pwr += np.abs(np.fft.rfft(o)) ** 2
+      inst_pwr += np.abs(np.fft.rfft(i)) ** 2
+
+    freqs = np.fft.rfftfreq(chunk, 1.0 / sr)
+    parts = []
+    for hz in _EQ_BANDS_HZ:
+      mask = (freqs >= hz / 1.5) & (freqs <= hz * 1.5)
+      if not mask.any():
+        continue
+      o_band = orig_pwr[mask].mean()
+      i_band = inst_pwr[mask].mean()
+      if o_band < 1e-12 or i_band < 1e-12:
+        continue
+      gain_db = 10.0 * np.log10(o_band / i_band)
+      gain_db = max(-_EQ_MAX_GAIN_DB, min(_EQ_MAX_GAIN_DB, gain_db))
+      if abs(gain_db) >= 0.5:
+        parts.append(f"equalizer=f={hz}:width_type=o:width=1:g={gain_db:.1f}")
+
+    return ",".join(parts)
+  except Exception as e:
+    print(f"EQ analysis failed, skipping: {e}")
+    return ""
+
+
 def _build_pitch_filter(semitones: float, sample_rate: int = 44100) -> str:
     """Build ffmpeg filter suffix for pitch shifting without tempo change.
 
@@ -451,7 +528,7 @@ def _build_pitch_filter(semitones: float, sample_rate: int = 44100) -> str:
 
 
 @app.post("/api/songs/{song_id}/variants", response_model=Song)
-def start_variants(song_id: str):
+def start_variants(song_id: str, req: VariantsRequest = VariantsRequest()):
     """Pre-generate all audio variants (pitch × vocal level combinations)."""
     song = db.get_song(song_id)
     if not song:
@@ -480,7 +557,9 @@ def start_variants(song_id: str):
             song_id,
             AUDIO_DIR / song["vocals_filename"],
             AUDIO_DIR / song["instrumental_filename"],
+            VIDEOS_DIR / song["video_filename"],
             variants_dir,
+            req.eq_match,
         ),
         daemon=True,
     )
@@ -664,7 +743,7 @@ def _export_worker(
 
 def _variants_worker(
     song_id: str, vocals_path: Path, instrumental_path: Path,
-    output_dir: Path,
+    original_path: Path, output_dir: Path, eq_match: bool = False,
 ) -> None:
     """Background worker to pre-generate all audio variants (pitch × vocal level)."""
     import subprocess as _sp
@@ -673,15 +752,29 @@ def _variants_worker(
     total = len(combos)
     on_progress = _make_progress_cb(song_id, "variants_progress")
 
+    # Pre-compute the EQ correction filter once for this song (applied to non-100% vocal variants)
+    eq_filter = ""
+    if eq_match:
+        print(f"Computing EQ correction for {song_id}...")
+        eq_filter = _compute_eq_filter(original_path, instrumental_path)
+        print(f"EQ filter: {eq_filter or '(none)'}")
+
     try:
         for i, (pitch, vocal) in enumerate(combos):
             out_path = output_dir / f"p{pitch}_v{vocal}.mp3"
             vocal_level = vocal / 100.0
 
             pitch_filter = _build_pitch_filter(pitch)
+
+            # Apply EQ to the instrumental when vocals are reduced (not full original mix)
+            if eq_filter and vocal < 100:
+                inst_chain = f"[0:a]{eq_filter}[inst_eq];[inst_eq]"
+            else:
+                inst_chain = "[0:a]"
+
             filter_complex = (
                 f"[1:a]volume={vocal_level}[v];"
-                f"[0:a][v]amix=inputs=2:duration=longest:normalize=0{pitch_filter}[a]"
+                f"{inst_chain}[v]amix=inputs=2:duration=longest:normalize=0{pitch_filter}[a]"
             )
 
             cmd = [
@@ -709,7 +802,10 @@ def _variants_worker(
         print(f"Variants failed for {song_id}: {e}")
 
 
-def _stems_worker(song_id: str, video_path: Path, vocals_out: Path, instrumental_out: Path) -> None:
+def _stems_worker(
+    song_id: str, video_path: Path, vocals_out: Path, instrumental_out: Path,
+    eq_match: bool = False,
+) -> None:
     """Background worker for Demucs stem separation."""
     try:
         demucs.separate(video_path, vocals_out, instrumental_out)
@@ -720,7 +816,7 @@ def _stems_worker(song_id: str, video_path: Path, vocals_out: Path, instrumental
         variants_dir = VARIANTS_DIR / song_id
         variants_dir.mkdir(parents=True, exist_ok=True)
         db.update_song(song_id, variants_status="processing", variants_progress=0.0)
-        _variants_worker(song_id, vocals_out, instrumental_out, variants_dir)
+        _variants_worker(song_id, vocals_out, instrumental_out, video_path, variants_dir, eq_match)
     except Exception as e:
         db.update_song(song_id, stems_status="error", stems_error=str(e)[:500])
         print(f"Stems failed for {song_id}: {e}")
