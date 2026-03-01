@@ -903,6 +903,14 @@ def _make_progress_cb(song_id: str, field: str, interval: float = 2.0):
     return callback
 
 
+def _lyrics_need_romanization(lyrics_lrc: str) -> bool:
+    """Check if lyrics contain Korean (Hangul) characters that would benefit from romanization."""
+    from karaoke_workflows.lyrics import parse_lyrics_content, romanize_korean
+
+    lyrics = parse_lyrics_content(lyrics_lrc)
+    return any(romanize_korean(line.text) is not None for line in lyrics)
+
+
 def _overlay_worker(
     song_id: str,
     video_path: Path,
@@ -910,42 +918,54 @@ def _overlay_worker(
     lyrics_output: Path,
     romanized_output: Path,
 ) -> None:
-    """Background worker for lyrics overlay rendering (both variants)."""
+    """Background worker for lyrics overlay rendering (both variants).
+
+    If lyrics don't need romanization (no Korean/CJK characters), we render
+    once and copy the result for both variants to avoid duplicate work.
+    """
     try:
+        needs_romanization = _lyrics_need_romanization(lyrics_lrc)
+        progress_cb = _make_progress_cb(song_id, "overlay_progress")
 
-        def on_progress(p: float) -> None:
-            # Each variant is half the total progress
-            pass
+        if not needs_romanization:
+            # Render once and reuse for both variants
+            overlay_mod.create_overlay(
+                video_path,
+                lyrics_lrc,
+                lyrics_output,
+                on_progress=progress_cb,
+                romanize=False,
+            )
+            shutil.copy2(lyrics_output, romanized_output)
+            print(f"Overlay ready (no romanization needed, reused): {song_id}")
+        else:
+            # 1) Render lyrics-only (no romanization) — 0-50%
+            def lyrics_progress(p: float) -> None:
+                progress_cb(p * 0.5)
 
-        # 1) Render lyrics-only (no romanization) — 0-50%
-        progress_lyrics = _make_progress_cb(song_id, "overlay_progress")
+            overlay_mod.create_overlay(
+                video_path,
+                lyrics_lrc,
+                lyrics_output,
+                on_progress=lyrics_progress,
+                romanize=False,
+            )
+            print(f"Overlay lyrics variant ready: {song_id}")
 
-        def lyrics_progress(p: float) -> None:
-            progress_lyrics(p * 0.5)
+            # 2) Render romanized — 50-100%
+            def romanized_progress(p: float) -> None:
+                progress_cb(0.5 + p * 0.5)
 
-        overlay_mod.create_overlay(
-            video_path,
-            lyrics_lrc,
-            lyrics_output,
-            on_progress=lyrics_progress,
-            romanize=False,
-        )
-        print(f"Overlay lyrics variant ready: {song_id}")
-
-        # 2) Render romanized — 50-100%
-        def romanized_progress(p: float) -> None:
-            progress_lyrics(0.5 + p * 0.5)
-
-        overlay_mod.create_overlay(
-            video_path,
-            lyrics_lrc,
-            romanized_output,
-            on_progress=romanized_progress,
-            romanize=True,
-        )
+            overlay_mod.create_overlay(
+                video_path,
+                lyrics_lrc,
+                romanized_output,
+                on_progress=romanized_progress,
+                romanize=True,
+            )
+            print(f"Overlay romanized variant ready: {song_id}")
 
         db.update_song(song_id, overlay_status="ready", overlay_progress=1.0)
-        print(f"Overlay both variants ready: {song_id}")
     except Exception as e:
         db.update_song(song_id, overlay_status="error", overlay_error=str(e)[:500])
         print(f"Overlay failed for {song_id}: {e}")
