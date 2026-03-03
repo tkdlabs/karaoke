@@ -1,10 +1,12 @@
 """SQLite database for karaoke song library."""
 
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "data" / "karaoke.db"
+_default_data_dir = Path(__file__).parent.parent / "data"
+DB_PATH = Path(os.environ.get("DATA_DIR", str(_default_data_dir))) / "karaoke.db"
 
 
 def _now() -> str:
