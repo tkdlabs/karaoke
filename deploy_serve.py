@@ -46,10 +46,21 @@ from deploy_lib.systemd import (  # noqa: E402
   step_migrate_data,
   step_reload_daemon,
   step_set_env_permissions,
-  step_setup_venv,
   step_write_env,
 )
 from deploy_lib.target import Target  # noqa: E402
+
+
+def step_setup_venv_serve(target: Target, config: SystemdConfig) -> None:
+  """Set up venv using requirements-serve.txt (no torch/demucs/yt-dlp)."""
+  print("Setting up Python venv (serve deps only)...")
+  venv = f"{config.deploy_dir}/.venv"
+  python = f"{venv}/bin/python3"
+  if not target.exists(venv):
+    target.run(f"python3 -m venv {venv}")
+  target.run(f"{python} -m ensurepip --upgrade")
+  target.run(f"{python} -m pip install --quiet --upgrade pip")
+  target.run(f"{python} -m pip install -r requirements-serve.txt", cwd=config.backend_dir)
 
 ssh_host = os.environ.get("SSH_HOST")
 if not ssh_host:
@@ -105,7 +116,7 @@ SERVE_STEPS = [
   step_git_pull,
   step_create_deploy_dir,
   step_create_dirs,
-  step_setup_venv,
+  step_setup_venv_serve,
   step_migrate_data,
   step_write_env,
   step_set_env_permissions,
