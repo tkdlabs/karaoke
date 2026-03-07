@@ -2,6 +2,22 @@
 
 Web-based karaoke song manager and player. Downloads music videos from YouTube, separates audio stems with Demucs, pre-generates 21 pitch/vocal variants, renders synced lyrics overlays, and exports videos with configurable vocal mix.
 
+## Process
+
+- Commit after working on feature / bug / design.
+- Directories:
+  - bugs/ will contain open and fixed issues in .md format
+  - features/ will contain feature requests in .md format
+  - designs/ will contain engineering designs in .md format
+- Try to work on one item at the time.
+- If item is large in scope, feel free to break it down to more bugs/features/designs.
+- Naming conventions:
+  - Open bugs/, features/ files should be of nn_{bug|feature}_description.md format
+  - Resolved bugs/, features/ files should be of fixed_nn_{bug|feature}_description.md format
+  - Designs can be in free form format.
+- When you finish working on bug or feature, remember to rename if to fixed_ format on commit.
+
+
 ## Stack
 
 - **Frontend**: Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4, port 3002
