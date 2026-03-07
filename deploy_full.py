@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Production (systemd) deployment for Karaoke.
+"""Full (admin + frontend) systemd deployment for Karaoke.
 
 Deploys the Karaoke service as two system-level systemd units on a remote
 host via SSH.  The target host must have the deploy user and sudoers
 configured — see workflows/deployment/designs/systemd_deployment.md.
 
+For a serve-node deployment (backend only, no frontend, SERVE_MODE=1),
+use deploy_serve.py instead.
+
 Usage:
-  SSH_HOST=media.local python deploy_prod.py
-  SSH_HOST=media.local SSH_USER=deploy SSH_KEY=~/.ssh/id_ed25519 python deploy_prod.py
-  SSH_HOST=media.local SERVE_MODE=1 python deploy_prod.py   # broadcast/serve node
+  SSH_HOST=media.local python deploy_full.py
+  SSH_HOST=media.local SSH_USER=deploy SSH_KEY=~/.ssh/id_ed25519 python deploy_full.py
 
 Environment variables:
   SSH_HOST            Remote host (required)
@@ -24,9 +26,6 @@ Environment variables:
                       (default: http://localhost:BACKEND_PORT).
                       Override when clients connect from other machines, e.g.
                       http://192.168.1.10:8001 or https://karaoke.example.com
-  SERVE_MODE          Set to "1" to deploy in read-only serving mode (no yt-dlp /
-                      Demucs / admin endpoints).  Requires SERVE_MODE support in
-                      server/main.py — see designs/serve_mode.md.
 """
 
 import os
@@ -43,7 +42,7 @@ from deploy_lib.systemd import SystemdConfig, SystemdDeployer  # noqa: E402
 ssh_host = os.environ.get("SSH_HOST")
 if not ssh_host:
   print("ERROR: SSH_HOST environment variable is required.")
-  print("  Example: SSH_HOST=media.local python deploy_prod.py")
+  print("  Example: SSH_HOST=media.local python deploy_full.py")
   sys.exit(1)
 
 backend_port = int(os.environ.get("BACKEND_PORT", "8001"))
@@ -51,7 +50,6 @@ frontend_port = int(os.environ.get("FRONTEND_PORT", "3002"))
 deploy_dir = os.environ.get("DEPLOY_DIR", "/opt/karaoke")
 ai_dev_path = os.environ.get("AI_DEV_PATH", "/opt/ai-dev")
 api_url = os.environ.get("API_URL", f"http://localhost:{backend_port}")
-serve_mode = os.environ.get("SERVE_MODE", "")
 
 config = SystemdConfig(
   app_name="karaoke",
@@ -62,13 +60,11 @@ config = SystemdConfig(
   frontend_port=frontend_port,
   service_user=os.environ.get("SERVICE_USER", "tom"),
   # PORT must be a literal here — systemd EnvironmentFile= does not expand $VARS.
-  # SERVE_MODE written to .env so operators can toggle it without re-deploying.
   extra_env_vars={
     "PORT": str(backend_port),
-    "SERVE_MODE": serve_mode,
   },
   # NEXT_PUBLIC_API_URL is baked into the Next.js bundle at build time.
-  # Override API_URL when clients connect from other hosts (TVs, phones).
+  # Override API_URL when clients connect from other hosts.
   frontend_env_vars={
     "NEXT_PUBLIC_API_URL": api_url,
   },
