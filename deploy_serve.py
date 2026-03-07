@@ -59,7 +59,7 @@ if not ssh_host:
 
 backend_port = int(os.environ.get("BACKEND_PORT", "8001"))
 deploy_dir = os.environ.get("DEPLOY_DIR", "/opt/karaoke-serve")
-ai_dev_path = os.environ.get("AI_DEV_PATH", "~/ai-dev")
+ai_dev_path = os.environ.get("AI_DEV_PATH", "/opt/ai-dev")
 
 
 def step_install_backend_unit(target: Target, config: SystemdConfig) -> None:
