@@ -71,7 +71,7 @@ def main() -> None:
     help="Path to SSH private key (default: ~/.ssh/id_ed25519)",
   )
   parser.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
-  mode = parser.add_mutually_exclusive_group()
+  mode = parser.add_mutually_exclusive_group(required=True)
   mode.add_argument(
     "--serve",
     action="store_true",
@@ -80,7 +80,7 @@ def main() -> None:
   mode.add_argument(
     "--full",
     action="store_true",
-    help="Full deploy: frontend + backend via nohup (default).",
+    help="Full deploy: frontend + backend via nohup.",
   )
   args = parser.parse_args()
 
