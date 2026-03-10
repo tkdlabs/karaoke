@@ -25,14 +25,22 @@ def extract_audio(video_path: Path, audio_path: Path) -> None:
 
 def run_demucs(input_path: Path, output_dir: Path, model: str = "htdemucs") -> Path:
     """Run demucs and return the stems directory."""
+    # Use the demucs binary co-located with our Python interpreter.
+    # We avoid `sys.executable -m demucs` because the local server/demucs.py module
+    # shadows the installed demucs package during module lookup, causing a silent no-op.
+    demucs_bin = Path(sys.executable).parent / "demucs"
     cmd = [
-        sys.executable, "-m", "demucs",
+        str(demucs_bin),
         "-n", model,
         "-o", str(output_dir),
         "--mp3",
         str(input_path),
     ]
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"demucs failed (exit {result.returncode}):\n{result.stderr[-1000:]}"
+        )
     return output_dir / model / input_path.stem
 
 

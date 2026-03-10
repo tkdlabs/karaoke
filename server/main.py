@@ -1,11 +1,19 @@
 """FastAPI backend for karaoke song management."""
 
+import logging
 import os
 import re
 import shutil
 import threading
 import uuid
 from pathlib import Path
+
+logging.basicConfig(
+  level=logging.INFO,
+  format="%(asctime)s [%(levelname)s] %(message)s",
+  datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,7 +78,7 @@ def startup():
   THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
 
   if SERVE_MODE:
-    print("Running in SERVE_MODE — admin endpoints disabled")
+    log.info("Running in SERVE_MODE — admin endpoints disabled")
     return
 
   # Reset any stuck "processing" statuses from a previous interrupted run
@@ -93,7 +101,7 @@ def startup():
       updates["variants_error"] = "Interrupted by server restart"
     if updates:
       db.update_song(song["id"], **updates)
-      print(f"Reset stuck processing for {song['id']}: {list(updates.keys())}")
+      log.warning(f"Reset stuck processing for {song['id']}: {list(updates.keys())}")
 
 
 # ── Always-on routes ──────────────────────────────────────────────────────────
@@ -793,7 +801,7 @@ def _overlay_worker(
         romanize=False,
       )
       shutil.copy2(lyrics_output, romanized_output)
-      print(f"Overlay ready (no romanization needed, reused): {song_id}")
+      log.info(f"Overlay ready (no romanization needed, reused): {song_id}")
     else:
       # 1) Render lyrics-only (no romanization) — 0-50%
       def lyrics_progress(p: float) -> None:
@@ -806,7 +814,7 @@ def _overlay_worker(
         on_progress=lyrics_progress,
         romanize=False,
       )
-      print(f"Overlay lyrics variant ready: {song_id}")
+      log.info(f"Overlay lyrics variant ready: {song_id}")
 
       # 2) Render romanized — 50-100%
       def romanized_progress(p: float) -> None:
@@ -819,12 +827,12 @@ def _overlay_worker(
         on_progress=romanized_progress,
         romanize=True,
       )
-      print(f"Overlay romanized variant ready: {song_id}")
+      log.info(f"Overlay romanized variant ready: {song_id}")
 
     db.update_song(song_id, overlay_status="ready", overlay_progress=1.0)
   except Exception as e:
     db.update_song(song_id, overlay_status="error", overlay_error=str(e)[:500])
-    print(f"Overlay failed for {song_id}: {e}")
+    log.error(f"Overlay failed for {song_id}: {e}")
 
 
 def _export_worker(
@@ -849,10 +857,10 @@ def _export_worker(
       on_progress=on_progress,
     )
     db.update_song(song_id, export_status="ready", export_progress=1.0)
-    print(f"Export ready: {song_id}")
+    log.info(f"Export ready: {song_id}")
   except Exception as e:
     db.update_song(song_id, export_status="error", export_error=str(e)[:500])
-    print(f"Export failed for {song_id}: {e}")
+    log.error(f"Export failed for {song_id}: {e}")
 
 
 _EQ_BANDS_HZ = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -957,7 +965,7 @@ def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
 
     return ",".join(parts)
   except Exception as e:
-    print(f"EQ analysis failed, skipping: {e}")
+    log.warning(f"EQ analysis failed, skipping: {e}")
     return ""
 
 
@@ -1011,15 +1019,15 @@ def _variants_worker(
   # Pre-compute the EQ correction filter once for this song (applied to non-100% vocal variants)
   eq_filter = ""
   if eq_match:
-    print(f"Computing frequency-dependent EQ correction for {song_id}...")
+    log.info(f"Computing frequency-dependent EQ correction for {song_id}...")
     eq_filter = _compute_eq_filter(original_path, instrumental_path)
-    print(f"EQ filter: {eq_filter or '(none)'}")
+    log.info(f"EQ filter: {eq_filter or '(none)'}")
 
   # Harmonic exciter filter for restoring brightness
   exciter_filter = ""
   if exciter:
     exciter_filter = _build_exciter_filter()
-    print(f"Exciter filter: {exciter_filter}")
+    log.info(f"Exciter filter: {exciter_filter}")
 
   try:
     for i, (pitch, vocal) in enumerate(combos):
@@ -1072,10 +1080,10 @@ def _variants_worker(
       on_progress((i + 1) / total)
 
     db.update_song(song_id, variants_status="ready", variants_progress=1.0)
-    print(f"Variants ready: {song_id}")
+    log.info(f"Variants ready: {song_id}")
   except Exception as e:
     db.update_song(song_id, variants_status="error", variants_error=str(e)[:500])
-    print(f"Variants failed for {song_id}: {e}")
+    log.error(f"Variants failed for {song_id}: {e}")
 
 
 def _stems_worker(
@@ -1087,10 +1095,11 @@ def _stems_worker(
   exciter: bool = False,
 ) -> None:
   """Background worker for Demucs stem separation."""
+  log.info(f"Stems started: {song_id}")
   try:
     demucs.separate(video_path, vocals_out, instrumental_out)
     db.update_song(song_id, stems_status="ready")
-    print(f"Stems ready: {song_id}")
+    log.info(f"Stems ready: {song_id}")
 
     # Auto-trigger variant generation
     variants_dir = VARIANTS_DIR / song_id
@@ -1107,7 +1116,7 @@ def _stems_worker(
     )
   except Exception as e:
     db.update_song(song_id, stems_status="error", stems_error=str(e)[:500])
-    print(f"Stems failed for {song_id}: {e}")
+    log.error(f"Stems failed for {song_id}: {e}")
 
 
 def _generate_thumbnail(song_id: str, video_path: Path) -> None:
@@ -1160,25 +1169,26 @@ def _generate_thumbnail(song_id: str, video_path: Path) -> None:
     timeout=15,
   )
   if result.returncode == 0:
-    print(f"Thumbnail generated: {song_id}")
+    log.info(f"Thumbnail generated: {song_id}")
   else:
-    print(
+    log.warning(
       f"Thumbnail failed for {song_id}: {result.stderr.decode(errors='replace')[-200:]}"
     )
 
 
 def _download_worker(song_id: str, url: str, output_path: Path) -> None:
   """Background worker to download a video."""
+  log.info(f"Download started: {song_id} {url}")
   try:
     ytdlp.download(url, output_path)
     db.update_song(song_id, status="ready")
-    print(f"Download complete: {song_id}")
+    log.info(f"Download complete: {song_id}")
 
     # Generate thumbnail from downloaded video
     _generate_thumbnail(song_id, output_path)
   except Exception as e:
     db.update_song(song_id, status="error", error_message=str(e)[:500])
-    print(f"Download failed for {song_id}: {e}")
+    log.error(f"Download failed for {song_id}: {e}")
 
 
 # ── Register full-mode router ─────────────────────────────────────────────────
