@@ -439,6 +439,8 @@ def download_export(song_id: str):
     )
 
 
+if not SERVE_MODE:
+
     @app.delete("/api/songs/{song_id}/export", response_model=Song)
     def delete_export(song_id: str):
         """Remove the exported video file."""
@@ -551,6 +553,8 @@ def download_overlay(song_id: str, variant: str = "lyrics"):
         filename=download_name,
     )
 
+
+if not SERVE_MODE:
 
     @app.delete("/api/songs/{song_id}/overlay", response_model=Song)
     def delete_overlay(song_id: str):
