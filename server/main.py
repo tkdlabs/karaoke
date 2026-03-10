@@ -1200,4 +1200,30 @@ if __name__ == "__main__":
   import uvicorn
 
   port = int(os.environ.get("PORT", 8001))
-  uvicorn.run(app, host="0.0.0.0", port=port)
+  uvicorn.run(
+    app,
+    host="0.0.0.0",
+    port=port,
+    log_config={
+      "version": 1,
+      "disable_existing_loggers": False,
+      "formatters": {
+        "default": {
+          "format": "%(asctime)s [%(levelname)s] %(message)s",
+          "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+      },
+      "handlers": {
+        "default": {
+          "class": "logging.StreamHandler",
+          "formatter": "default",
+          "stream": "ext://sys.stdout",
+        },
+      },
+      "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+      },
+    },
+  )
