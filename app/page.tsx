@@ -1,11 +1,26 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { searchVideos, listSongs, addSong, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail } from "@/lib/api";
 import { SearchResults } from "@/components/SearchResults";
 import { SongLibrary } from "@/components/SongLibrary";
 import { LyricsSearchModal } from "@/components/LyricsSearchModal";
 import type { SearchResult, Song } from "@/types/karaoke";
+
+const POLL_ACTIVE_MS = 3000;   // any song is downloading / processing
+const POLL_IDLE_MS = 20000;    // all songs are at rest
+
+function hasActiveProcessing(songs: Song[]): boolean {
+  return songs.some(
+    (s) =>
+      s.status === "downloading" ||
+      s.status === "pending" ||
+      s.stems_status === "processing" ||
+      s.variants_status === "processing" ||
+      s.overlay_status === "processing" ||
+      s.export_status === "processing",
+  );
+}
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -16,21 +31,27 @@ export default function Home() {
   const [addingSongs, setAddingSongs] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [lyricsSearchSong, setLyricsSearchSong] = useState<Song | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSongs = useCallback(async () => {
     try {
       const data = await listSongs();
       setSongs(data);
+      // Schedule next poll: fast when something is actively processing, slow otherwise
+      const delay = hasActiveProcessing(data) ? POLL_ACTIVE_MS : POLL_IDLE_MS;
+      timerRef.current = setTimeout(loadSongs, delay);
     } catch {
-      // Silently fail — library will appear empty
+      // Silently fail — retry at the slow cadence
+      timerRef.current = setTimeout(loadSongs, POLL_IDLE_MS);
     }
   }, []);
 
-  // Load library on mount and poll for status updates
+  // Load library on mount; polling is self-scheduling via setTimeout above
   useEffect(() => {
     loadSongs();
-    const interval = setInterval(loadSongs, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [loadSongs]);
 
   const handleSearch = async (e: React.FormEvent) => {
