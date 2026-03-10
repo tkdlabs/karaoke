@@ -53,6 +53,10 @@ def _build_stubs() -> dict:
   # Stub it so any accidental import at module level doesn't fail.
   kw = types.ModuleType("karaoke_workflows")
   kw_lyrics = types.ModuleType("karaoke_workflows.lyrics")  # type: ignore[attr-defined]
+  # Provide defaults used by start_overlay(); tests that need different values
+  # (e.g. HAS_KOREAN_ROMANIZER=False) override these after fixture setup.
+  kw_lyrics.HAS_KOREAN_ROMANIZER = True
+  kw_lyrics.parse_lyrics_content = lambda lrc: []  # no lines → no Korean detected
   stubs["karaoke_workflows"] = kw
   stubs["karaoke_workflows.lyrics"] = kw_lyrics
 

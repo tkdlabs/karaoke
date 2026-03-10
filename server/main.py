@@ -588,6 +588,22 @@ def start_overlay(song_id: str):
   if song.get("overlay_status") == "processing":
     raise HTTPException(status_code=409, detail="Overlay rendering already in progress")
 
+  # Check upfront if Korean romanization is needed but unavailable
+  from karaoke_workflows.lyrics import HAS_KOREAN_ROMANIZER, parse_lyrics_content
+
+  has_korean = any(
+    any("\uAC00" <= ch <= "\uD7AF" for ch in line.text)
+    for line in parse_lyrics_content(song["lyrics_synced"])
+  )
+  if has_korean and not HAS_KOREAN_ROMANIZER:
+    raise HTTPException(
+      status_code=422,
+      detail=(
+        "Korean lyrics detected but korean_romanizer is not installed on the server. "
+        "Install it with: pip install korean_romanizer"
+      ),
+    )
+
   lyrics_filename = f"{song_id}_overlay_lyrics.mp4"
   romanized_filename = f"{song_id}_overlay_romanized.mp4"
 
