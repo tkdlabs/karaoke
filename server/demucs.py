@@ -6,6 +6,7 @@ Reuses logic from workflows/karaoke/audio.py.
 
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -25,7 +26,7 @@ def extract_audio(video_path: Path, audio_path: Path) -> None:
 def run_demucs(input_path: Path, output_dir: Path, model: str = "htdemucs") -> Path:
     """Run demucs and return the stems directory."""
     cmd = [
-        "demucs",
+        sys.executable, "-m", "demucs",
         "-n", model,
         "-o", str(output_dir),
         "--mp3",
