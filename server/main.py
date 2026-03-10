@@ -125,6 +125,8 @@ def get_song(song_id: str):
     return song
 
 
+if not SERVE_MODE:
+
     @app.post("/api/songs", response_model=Song, status_code=201)
     def add_song(req: AddSongRequest):
         """Add a song to the library and start downloading."""
