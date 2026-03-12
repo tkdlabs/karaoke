@@ -13,9 +13,9 @@ Web-based karaoke song manager and player. Downloads music videos from YouTube, 
 - If item is large in scope, feel free to break it down to more bugs/features/designs.
 - Naming conventions:
   - Open bugs/, features/ files should be of nn_{bug|feature}_description.md format
-  - Resolved bugs/, features/ files should be of fixed_nn_{bug|feature}_description.md format
+  - Resolved bugs/, features/ files should be of done_nn_{bug|feature}_description.md format
   - Designs can be in free form format.
-- When you finish working on bug or feature, remember to rename if to fixed_ format on commit.
+- When you finish working on bug or feature, remember to rename it to done_ format on commit.
 
 
 ## Stack
