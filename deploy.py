@@ -36,7 +36,7 @@ _local_ai_dev = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
 
 sys.path.insert(0, os.path.join(_local_ai_dev, "workflows/deployment/src"))
 
-from deploy_lib import DeployConfig, Deployer, LocalTarget, SSHTarget  # noqa: E402
+from deploy_lib import DeployConfig, Deployer, LocalTarget, SSHTarget, add_no_pull_arg  # noqa: E402
 from deploy_lib.steps import step_setup_venv  # noqa: E402
 from deploy_lib.systemd import (  # noqa: E402
   SYSTEMD_STEPS,
@@ -71,6 +71,7 @@ def main() -> None:
     help="Path to SSH private key (default: ~/.ssh/id_ed25519)",
   )
   parser.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
+  add_no_pull_arg(parser)
   mode = parser.add_mutually_exclusive_group(required=True)
   mode.add_argument(
     "--serve",
@@ -103,6 +104,7 @@ def main() -> None:
       service_user=os.environ.get("SERVICE_USER", "tom"),
       extra_env_vars={"PORT": str(backend_port), "SERVE_MODE": "1"},
       migrate_data_from="data",
+      skip_git_pull=args.no_pull,
     )
     target = SSHTarget(args.host, user=args.user, key_filename=args.key, port=args.port)
     SystemdDeployer(config, target, steps=SERVE_STEPS).deploy()
@@ -125,6 +127,7 @@ def main() -> None:
       frontend_mode=os.environ.get("FRONTEND_MODE", "dev"),
       migrate_data_from="data",
       kill_stale_ports=True,
+      skip_git_pull=args.no_pull,
     )
     Deployer(config, target).deploy()
 
