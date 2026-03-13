@@ -52,10 +52,8 @@ def step_setup_venv_serve(target: Target, config: SystemdConfig) -> None:
   venv = f"{config.deploy_dir}/.venv"
   python = f"{venv}/bin/python3"
   if not target.exists(venv):
-    target.run(f"python3 -m venv {venv}")
-  target.run(f"{python} -m ensurepip --upgrade")
-  target.run(f"{python} -m pip install --quiet --upgrade pip")
-  target.run(f"{python} -m pip install -r requirements-serve.txt", cwd=config.backend_dir)
+    target.run(f"uv venv {venv}")
+  target.run(f"uv pip install --python {python} -r requirements-serve.txt", cwd=config.backend_dir)
 
 
 SERVE_STEPS = [step_setup_venv_serve if s is step_setup_venv else s for s in SYSTEMD_STEPS]
