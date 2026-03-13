@@ -1,0 +1,23 @@
+[project]
+name = "karaoke-server"
+version = "0.1.0"
+description = "Karaoke download and processing server"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.109.0",
+  "uvicorn[standard]>=0.27.0",
+  "pydantic>=2.0.0",
+  "yt-dlp",
+  "lrcup",
+  "karaoke-workflows[korean]",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
+
+[tool.uv.sources]
+karaoke-workflows = { path = "../../../workflows/karaoke", editable = true }
