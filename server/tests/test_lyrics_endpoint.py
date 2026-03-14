@@ -1,8 +1,6 @@
 """Tests for GET /api/songs/{song_id}/lyrics."""
 
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -114,15 +112,12 @@ def test_lyrics_sorted_by_time(serve_mode_client: TestClient, tmp_path: Path) ->
 def test_lyrics_romanize_korean(serve_mode_client: TestClient, tmp_path: Path) -> None:
   _insert_song_with_lyrics(tmp_path)
 
-  kw_lyrics = sys.modules["karaoke_workflows.lyrics"]
-  kw_lyrics.romanize_korean = MagicMock(side_effect=lambda t: "romanized" if "안" in t else None)
-
   resp = serve_mode_client.get(f"/api/songs/{_SONG_ID}/lyrics?romanize=true")
   assert resp.status_code == 200
   lines = resp.json()["lines"]
 
   korean_line = next(l for l in lines if l["text"] == "안녕하세요")
-  assert korean_line["romanized"] == "romanized"
+  assert korean_line["romanized"] is not None
 
   latin_line = next(l for l in lines if l["text"] == "Hello world")
   assert latin_line["romanized"] is None

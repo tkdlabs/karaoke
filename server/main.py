@@ -146,9 +146,15 @@ def get_lyrics(song_id: str, romanize: bool = False):
     return LyricsResponse(song_id=song_id, has_lyrics=False, lines=[])
 
   if romanize:
-    from karaoke_workflows.lyrics import romanize_korean
+    from korean_romanizer.romanizer import Romanizer
+
+    def _romanize(text: str) -> str | None:
+      if not any("\uAC00" <= ch <= "\uD7A3" for ch in text):
+        return None
+      return Romanizer(text).romanize()
+
     lines = [
-      LyricsLine(time_ms=t, text=text, romanized=romanize_korean(text))
+      LyricsLine(time_ms=t, text=text, romanized=_romanize(text))
       for t, text in lyrics_mod.parse_lrc(lrc)
     ]
   else:
