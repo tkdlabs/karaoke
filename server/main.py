@@ -20,10 +20,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 import db
+import lyrics as lyrics_mod
 from models import (
   AddSongRequest,
   AdjustLyricsRequest,
   ExportRequest,
+  LyricsLine,
+  LyricsResponse,
   LyricsSearchResult,
   OverlayRequest,
   SearchResult,
@@ -125,6 +128,33 @@ def get_song(song_id: str):
   if not song:
     raise HTTPException(status_code=404, detail="Song not found")
   return song
+
+
+@app.get("/api/songs/{song_id}/lyrics", response_model=LyricsResponse)
+def get_lyrics(song_id: str, romanize: bool = False):
+  """Return parsed LRC lyrics for a song, with optional Korean romanization.
+
+  Available in SERVE_MODE. Romanization requires korean_romanizer to be installed;
+  requesting romanize=true without it returns HTTP 422.
+  """
+  song = db.get_song(song_id)
+  if not song:
+    raise HTTPException(status_code=404, detail="Song not found")
+
+  lrc = song.get("lyrics_synced")
+  if not lrc:
+    return LyricsResponse(song_id=song_id, has_lyrics=False, lines=[])
+
+  if romanize:
+    from karaoke_workflows.lyrics import romanize_korean
+    lines = [
+      LyricsLine(time_ms=t, text=text, romanized=romanize_korean(text))
+      for t, text in lyrics_mod.parse_lrc(lrc)
+    ]
+  else:
+    lines = [LyricsLine(time_ms=t, text=text) for t, text in lyrics_mod.parse_lrc(lrc)]
+
+  return LyricsResponse(song_id=song_id, has_lyrics=True, lines=lines)
 
 
 @app.get("/api/songs/{song_id}/export/download")
