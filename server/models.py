@@ -88,3 +88,15 @@ class OverlayRequest(BaseModel):
 class VariantsRequest(BaseModel):
     eq_match: bool = False  # frequency-dependent EQ correction (gentle in vocal range, stronger in bass/treble)
     exciter: bool = False  # apply harmonic exciter to restore brightness lost during vocal removal
+
+
+class LyricsLine(BaseModel):
+    time_ms: int
+    text: str
+    romanized: str | None = None
+
+
+class LyricsResponse(BaseModel):
+    song_id: str
+    has_lyrics: bool
+    lines: list[LyricsLine]

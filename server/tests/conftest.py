@@ -57,6 +57,7 @@ def _build_stubs() -> dict:
   # (e.g. HAS_KOREAN_ROMANIZER=False) override these after fixture setup.
   kw_lyrics.HAS_KOREAN_ROMANIZER = True
   kw_lyrics.parse_lyrics_content = lambda lrc: []  # no lines → no Korean detected
+  kw_lyrics.romanize_korean = lambda text: None  # default stub: no romanization
   stubs["karaoke_workflows"] = kw
   stubs["karaoke_workflows.lyrics"] = kw_lyrics
 
