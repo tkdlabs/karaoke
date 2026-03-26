@@ -100,3 +100,36 @@ class LyricsResponse(BaseModel):
     song_id: str
     has_lyrics: bool
     lines: list[LyricsLine]
+
+
+class BulkStemsRequest(BaseModel):
+    song_ids: list[str] | None = None
+    eq_match: bool = False
+    exciter: bool = False
+
+
+class BulkVariantsRequest(BaseModel):
+    song_ids: list[str] | None = None
+    eq_match: bool = False
+    exciter: bool = False
+
+
+class BulkOperationResponse(BaseModel):
+    operation_id: str
+    operation_type: str
+    total: int
+    song_ids: list[str]
+
+
+class BulkStatusResponse(BaseModel):
+    active: bool
+    operation_id: str | None = None
+    operation_type: str | None = None
+    status: str | None = None
+    total: int = 0
+    completed: int = 0
+    failed: int = 0
+    current_song_id: str | None = None
+    current_song_title: str | None = None
+    queue: list[str] = []
+    errors: dict[str, str] = {}

@@ -24,6 +24,10 @@ import lyrics as lyrics_mod
 from models import (
   AddSongRequest,
   AdjustLyricsRequest,
+  BulkOperationResponse,
+  BulkStatusResponse,
+  BulkStemsRequest,
+  BulkVariantsRequest,
   ExportRequest,
   LyricsLine,
   LyricsResponse,
@@ -69,6 +73,12 @@ THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 VARIANT_PITCHES = [-3, -2, -1, 0, 1, 2, 3]
 VARIANT_VOCALS = [0, 25, 100]  # percent
 
+# ── Bulk operation runtime state ──────────────────────────────────────────────
+_bulk_runtime: dict = {
+  "cancel_requested": False,
+  "lock": threading.Lock(),
+}
+
 
 @app.on_event("startup")
 def startup():
@@ -105,6 +115,27 @@ def startup():
     if updates:
       db.update_song(song["id"], **updates)
       log.warning(f"Reset stuck processing for {song['id']}: {list(updates.keys())}")
+
+  # Reset bulk cancel flag and auto-resume
+  with _bulk_runtime["lock"]:
+    _bulk_runtime["cancel_requested"] = False
+  active_bulk = db.get_active_bulk()
+  if active_bulk:
+    import json as _json
+    remaining = _json.loads(active_bulk["queue"])
+    if remaining:
+      log.info(
+        f"Resuming bulk {active_bulk['operation_type']}: "
+        f"{len(remaining)} songs remaining"
+      )
+      thread = threading.Thread(
+        target=_bulk_worker,
+        args=(active_bulk["id"],),
+        daemon=True,
+      )
+      thread.start()
+    else:
+      db.update_bulk(active_bulk["id"], status="completed", current_song_id=None)
 
 
 # ── Always-on routes ──────────────────────────────────────────────────────────
@@ -307,6 +338,44 @@ def serve_thumbnail(song_id: str):
     raise HTTPException(status_code=404, detail="Thumbnail not found")
 
   return FileResponse(thumb_path, media_type="image/jpeg")
+
+
+@app.get("/api/bulk/status")
+def bulk_status():
+  """Get current bulk operation status."""
+  import json as _json
+
+  op = db.get_active_bulk()
+  if not op:
+    # Check for most recent completed/cancelled operation
+    conn = db.get_connection()
+    row = conn.execute(
+      "SELECT * FROM bulk_operations ORDER BY updated_at DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if not row:
+      return BulkStatusResponse(active=False)
+    op = dict(row)
+
+  current_title = None
+  if op.get("current_song_id"):
+    current_song = db.get_song(op["current_song_id"])
+    if current_song:
+      current_title = current_song.get("title")
+
+  return BulkStatusResponse(
+    active=op["status"] == "active",
+    operation_id=op["id"],
+    operation_type=op["operation_type"],
+    status=op["status"],
+    total=op["total"],
+    completed=op["completed"],
+    failed=op["failed"],
+    current_song_id=op.get("current_song_id"),
+    current_song_title=current_title,
+    queue=_json.loads(op["queue"]),
+    errors=_json.loads(op["errors"]),
+  )
 
 
 # ── Full-mode-only routes (write_router) ──────────────────────────────────────
@@ -799,6 +868,160 @@ def regenerate_thumbnail(song_id: str):
     raise HTTPException(status_code=500, detail="Thumbnail generation failed")
 
   return {"status": "ok"}
+
+
+@write_router.post("/api/bulk/stems")
+def start_bulk_stems(req: BulkStemsRequest):
+  """Start bulk stem regeneration for multiple songs."""
+  import json as _json
+
+  active = db.get_active_bulk()
+  if active:
+    raise HTTPException(status_code=409, detail="A bulk operation is already running")
+
+  # Discover eligible songs
+  if req.song_ids is None:
+    eligible = [
+      s for s in db.list_songs()
+      if s["status"] == "ready"
+      and s.get("stems_status") in (None, "error")
+    ]
+    song_ids = [s["id"] for s in eligible]
+  else:
+    song_ids = []
+    for sid in req.song_ids:
+      song = db.get_song(sid)
+      if not song:
+        raise HTTPException(status_code=404, detail=f"Song {sid} not found")
+      if song["status"] != "ready":
+        continue
+      if song.get("stems_status") == "processing":
+        continue
+      song_ids.append(sid)
+
+  if not song_ids:
+    raise HTTPException(status_code=400, detail="No eligible songs found")
+
+  operation_id = str(uuid.uuid4())
+  db.upsert_bulk({
+    "id": operation_id,
+    "operation_type": "stems",
+    "eq_match": int(req.eq_match),
+    "exciter": int(req.exciter),
+    "status": "active",
+    "total": len(song_ids),
+    "completed": 0,
+    "failed": 0,
+    "queue": _json.dumps(song_ids),
+    "errors": "{}",
+    "current_song_id": None,
+  })
+
+  with _bulk_runtime["lock"]:
+    _bulk_runtime["cancel_requested"] = False
+
+  thread = threading.Thread(
+    target=_bulk_worker,
+    args=(operation_id,),
+    daemon=True,
+  )
+  thread.start()
+
+  log.info(
+    f"Bulk stems started: {len(song_ids)} songs, "
+    f"eq_match={req.eq_match}, exciter={req.exciter}"
+  )
+  return BulkOperationResponse(
+    operation_id=operation_id,
+    operation_type="stems",
+    total=len(song_ids),
+    song_ids=song_ids,
+  )
+
+
+@write_router.post("/api/bulk/variants")
+def start_bulk_variants(req: BulkVariantsRequest):
+  """Start bulk variant regeneration for multiple songs."""
+  import json as _json
+
+  active = db.get_active_bulk()
+  if active:
+    raise HTTPException(status_code=409, detail="A bulk operation is already running")
+
+  # Discover eligible songs
+  if req.song_ids is None:
+    eligible = [
+      s for s in db.list_songs()
+      if s.get("stems_status") == "ready"
+      and s.get("variants_status") in (None, "error")
+    ]
+    song_ids = [s["id"] for s in eligible]
+  else:
+    song_ids = []
+    for sid in req.song_ids:
+      song = db.get_song(sid)
+      if not song:
+        raise HTTPException(status_code=404, detail=f"Song {sid} not found")
+      if song.get("stems_status") != "ready":
+        continue
+      if song.get("variants_status") == "processing":
+        continue
+      song_ids.append(sid)
+
+  if not song_ids:
+    raise HTTPException(status_code=400, detail="No eligible songs found")
+
+  operation_id = str(uuid.uuid4())
+  db.upsert_bulk({
+    "id": operation_id,
+    "operation_type": "variants",
+    "eq_match": int(req.eq_match),
+    "exciter": int(req.exciter),
+    "status": "active",
+    "total": len(song_ids),
+    "completed": 0,
+    "failed": 0,
+    "queue": _json.dumps(song_ids),
+    "errors": "{}",
+    "current_song_id": None,
+  })
+
+  with _bulk_runtime["lock"]:
+    _bulk_runtime["cancel_requested"] = False
+
+  thread = threading.Thread(
+    target=_bulk_worker,
+    args=(operation_id,),
+    daemon=True,
+  )
+  thread.start()
+
+  log.info(
+    f"Bulk variants started: {len(song_ids)} songs, "
+    f"eq_match={req.eq_match}, exciter={req.exciter}"
+  )
+  return BulkOperationResponse(
+    operation_id=operation_id,
+    operation_type="variants",
+    total=len(song_ids),
+    song_ids=song_ids,
+  )
+
+
+@write_router.post("/api/bulk/cancel")
+def cancel_bulk():
+  """Cancel the current bulk operation."""
+  active = db.get_active_bulk()
+  if not active:
+    raise HTTPException(status_code=404, detail="No bulk operation is active")
+
+  import json as _json
+
+  with _bulk_runtime["lock"]:
+    _bulk_runtime["cancel_requested"] = True
+
+  remaining = len(_json.loads(active["queue"]))
+  return {"status": "cancelling", "completed": active["completed"], "remaining": remaining}
 
 
 # ── Background workers ────────────────────────────────────────────────────────
@@ -1386,6 +1609,147 @@ def _stems_worker(
   except Exception as e:
     db.update_song(song_id, stems_status="error", stems_error=str(e)[:500])
     log.error(f"Stems failed for {song_id}: {e}")
+
+
+# ── Bulk operation worker ─────────────────────────────────────────────────────
+
+
+def _bulk_should_skip(song: dict | None, operation_type: str) -> bool:
+  """Decide if a song should be skipped during bulk processing."""
+  if not song:
+    return True
+  if song["status"] != "ready":
+    return True
+  if operation_type == "stems":
+    return song.get("stems_status") == "processing"
+  else:  # variants
+    if song.get("stems_status") != "ready":
+      return True
+    return song.get("variants_status") == "processing"
+
+
+def _run_single_stems(
+  song_id: str, song: dict, eq_match: bool, exciter: bool
+) -> None:
+  """Set up and run stem separation synchronously for one song."""
+  vocals_filename = f"{song_id}_vocals.mp3"
+  instrumental_filename = f"{song_id}_instrumental.mp3"
+  db.update_song(
+    song_id,
+    vocals_filename=vocals_filename,
+    instrumental_filename=instrumental_filename,
+    stems_status="processing",
+    stems_error=None,
+  )
+  video_path = VIDEOS_DIR / song["video_filename"]
+  _stems_worker(
+    song_id,
+    video_path,
+    AUDIO_DIR / vocals_filename,
+    AUDIO_DIR / instrumental_filename,
+    eq_match,
+    exciter,
+  )
+
+
+def _run_single_variants(
+  song_id: str, song: dict, eq_match: bool, exciter: bool
+) -> None:
+  """Set up and run variant generation synchronously for one song."""
+  variants_dir = VARIANTS_DIR / song_id
+  if variants_dir.exists():
+    shutil.rmtree(variants_dir)
+  variants_dir.mkdir(parents=True)
+  db.update_song(
+    song_id,
+    variants_status="processing",
+    variants_error=None,
+    variants_progress=0.0,
+  )
+  _variants_worker(
+    song_id,
+    AUDIO_DIR / song["vocals_filename"],
+    AUDIO_DIR / song["instrumental_filename"],
+    VIDEOS_DIR / song["video_filename"],
+    variants_dir,
+    eq_match,
+    exciter,
+  )
+
+
+def _bulk_worker(operation_id: str) -> None:
+  """Process songs from the bulk queue sequentially."""
+  import json as _json
+
+  op = db.update_bulk(operation_id)  # refresh
+  if not op:
+    return
+  operation_type = op["operation_type"]
+  eq_match = bool(op["eq_match"])
+  exciter = bool(op["exciter"])
+  queue = _json.loads(op["queue"])
+  errors = _json.loads(op["errors"])
+  completed = op["completed"]
+  failed = op["failed"]
+
+  for song_id in list(queue):
+    with _bulk_runtime["lock"]:
+      if _bulk_runtime["cancel_requested"]:
+        db.update_bulk(operation_id, status="cancelled", current_song_id=None)
+        log.info(f"Bulk {operation_type} cancelled, {len(queue)} remaining")
+        return
+
+    db.update_bulk(operation_id, current_song_id=song_id)
+    song = db.get_song(song_id)
+
+    if _bulk_should_skip(song, operation_type):
+      queue.remove(song_id)
+      completed += 1
+      db.update_bulk(
+        operation_id,
+        completed=completed,
+        queue=_json.dumps(queue),
+      )
+      log.info(f"Bulk {operation_type}: skipped {song_id}")
+      continue
+
+    try:
+      if operation_type == "stems":
+        _run_single_stems(song_id, song, eq_match, exciter)
+      else:
+        _run_single_variants(song_id, song, eq_match, exciter)
+
+      queue.remove(song_id)
+      completed += 1
+      db.update_bulk(
+        operation_id,
+        completed=completed,
+        queue=_json.dumps(queue),
+      )
+      log.info(f"Bulk {operation_type}: completed {song_id} ({completed}/{op['total']})")
+    except Exception as e:
+      queue.remove(song_id)
+      failed += 1
+      errors[song_id] = str(e)[:200]
+      db.update_bulk(
+        operation_id,
+        failed=failed,
+        queue=_json.dumps(queue),
+        errors=_json.dumps(errors),
+      )
+      log.error(f"Bulk {operation_type} failed for {song_id}: {e}")
+
+  # Mark completed
+  final_op = db.update_bulk(operation_id)
+  if final_op and final_op["status"] == "active":
+    db.update_bulk(operation_id, status="completed", current_song_id=None)
+  else:
+    db.update_bulk(operation_id, current_song_id=None)
+
+  log.info(
+    f"Bulk {operation_type} finished: "
+    f"{completed} completed, {failed} failed out of {op['total']}"
+  )
 
 
 def _generate_thumbnail(song_id: str, video_path: Path) -> None:

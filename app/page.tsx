@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { searchVideos, listSongs, addSong, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail } from "@/lib/api";
+import { searchVideos, listSongs, addSong, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail, startBulkStems, startBulkVariants, getBulkStatus, cancelBulk } from "@/lib/api";
+import type { BulkStatus } from "@/lib/api";
 import { SearchResults } from "@/components/SearchResults";
 import { SongLibrary } from "@/components/SongLibrary";
 import { LyricsSearchModal } from "@/components/LyricsSearchModal";
@@ -31,12 +32,14 @@ export default function Home() {
   const [addingSongs, setAddingSongs] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [lyricsSearchSong, setLyricsSearchSong] = useState<Song | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<BulkStatus | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSongs = useCallback(async () => {
     try {
       const data = await listSongs();
       setSongs(data);
+      getBulkStatus().then(setBulkStatus).catch(() => {});
       // Schedule next poll: fast when something is actively processing, slow otherwise
       const delay = hasActiveProcessing(data) ? POLL_ACTIVE_MS : POLL_IDLE_MS;
       timerRef.current = setTimeout(loadSongs, delay);
@@ -186,6 +189,36 @@ export default function Home() {
     }
   };
 
+  const handleStartBulkStems = async (opts: { eq_match: boolean; exciter: boolean }) => {
+    try {
+      await startBulkStems(opts);
+      const status = await getBulkStatus();
+      setBulkStatus(status);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to start bulk stems");
+    }
+  };
+
+  const handleStartBulkVariants = async (opts: { eq_match: boolean; exciter: boolean }) => {
+    try {
+      await startBulkVariants(opts);
+      const status = await getBulkStatus();
+      setBulkStatus(status);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to start bulk variants");
+    }
+  };
+
+  const handleCancelBulk = async () => {
+    try {
+      await cancelBulk();
+      const status = await getBulkStatus();
+      setBulkStatus(status);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to cancel bulk operation");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setDeletingIds((prev) => new Set(prev).add(id));
     try {
@@ -254,6 +287,10 @@ export default function Home() {
         getThumbnailUrl={getThumbnailUrl}
         deletingIds={deletingIds}
         onSongsRefresh={loadSongs}
+        bulkStatus={bulkStatus}
+        onStartBulkStems={handleStartBulkStems}
+        onStartBulkVariants={handleStartBulkVariants}
+        onCancelBulk={handleCancelBulk}
       />
 
       {/* Lyrics Search Modal */}

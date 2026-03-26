@@ -173,3 +173,54 @@ export async function adjustLyricsOffset(
     } satisfies AdjustLyricsRequest),
   });
 }
+
+// ── Bulk operations ──────────────────────────────────────────────────────────
+
+export interface BulkRequest {
+  song_ids?: string[];
+  eq_match: boolean;
+  exciter: boolean;
+}
+
+export interface BulkOperationResponse {
+  operation_id: string;
+  operation_type: string;
+  total: number;
+  song_ids: string[];
+}
+
+export interface BulkStatus {
+  active: boolean;
+  operation_id: string | null;
+  operation_type: string | null;
+  status: string | null;
+  total: number;
+  completed: number;
+  failed: number;
+  current_song_id: string | null;
+  current_song_title: string | null;
+  queue: string[];
+  errors: Record<string, string>;
+}
+
+export async function startBulkStems(req: BulkRequest): Promise<BulkOperationResponse> {
+  return fetchApi("/api/bulk/stems", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function startBulkVariants(req: BulkRequest): Promise<BulkOperationResponse> {
+  return fetchApi("/api/bulk/variants", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function getBulkStatus(): Promise<BulkStatus> {
+  return fetchApi("/api/bulk/status");
+}
+
+export async function cancelBulk(): Promise<void> {
+  await fetchApi("/api/bulk/cancel", { method: "POST" });
+}

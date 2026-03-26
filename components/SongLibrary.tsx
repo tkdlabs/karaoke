@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Song } from "@/types/karaoke";
+import type { BulkStatus } from "@/lib/api";
 import { SongPlayer } from "./SongPlayer";
 import { LyricsEditor } from "./LyricsEditor";
 
@@ -110,6 +111,10 @@ interface SongLibraryProps {
   getThumbnailUrl: (songId: string) => string;
   deletingIds: Set<string>;
   onSongsRefresh: () => void;
+  bulkStatus: BulkStatus | null;
+  onStartBulkStems: (opts: { eq_match: boolean; exciter: boolean }) => void;
+  onStartBulkVariants: (opts: { eq_match: boolean; exciter: boolean }) => void;
+  onCancelBulk: () => void;
 }
 
 export function SongLibrary({
@@ -132,12 +137,18 @@ export function SongLibrary({
   getThumbnailUrl,
   deletingIds,
   onSongsRefresh,
+  bulkStatus,
+  onStartBulkStems,
+  onStartBulkVariants,
+  onCancelBulk,
 }: SongLibraryProps) {
   const [vocalLevels, setVocalLevels] = useState<Record<string, number>>({});
   const [playingSong, setPlayingSong] = useState<{ song: Song; videoVariant: "original" | "overlay_lyrics" | "overlay_romanized" } | null>(null);
   const [editingLyricsSong, setEditingLyricsSong] = useState<Song | null>(null);
   const [eqMatchFlags, setEqMatchFlags] = useState<Record<string, boolean>>({});
   const [exciterFlags, setExciterFlags] = useState<Record<string, boolean>>({});
+  const [bulkEqMatch, setBulkEqMatch] = useState(false);
+  const [bulkExciter, setBulkExciter] = useState(false);
 
   if (songs.length === 0) {
     return (
@@ -155,6 +166,91 @@ export function SongLibrary({
       <h2 className="text-lg font-semibold mb-3">
         Library ({songs.length})
       </h2>
+      {/* Bulk Operations */}
+      <div className="mb-4 rounded-lg bg-gray-800 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-gray-300">Bulk</span>
+          <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={bulkEqMatch}
+              onChange={(e) => setBulkEqMatch(e.target.checked)}
+              className="accent-teal-500"
+              disabled={bulkStatus?.active ?? false}
+            />
+            EQ match
+          </label>
+          <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={bulkExciter}
+              onChange={(e) => setBulkExciter(e.target.checked)}
+              className="accent-sky-500"
+              disabled={bulkStatus?.active ?? false}
+            />
+            Exciter
+          </label>
+          <button
+            onClick={() => onStartBulkStems({ eq_match: bulkEqMatch, exciter: bulkExciter })}
+            disabled={bulkStatus?.active ?? false}
+            className="px-3 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+          >
+            Regen All Stems
+          </button>
+          <button
+            onClick={() => onStartBulkVariants({ eq_match: bulkEqMatch, exciter: bulkExciter })}
+            disabled={bulkStatus?.active ?? false}
+            className="px-3 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+          >
+            Regen All Variants
+          </button>
+          {bulkStatus?.active && (
+            <button
+              onClick={onCancelBulk}
+              className="px-3 py-1 text-xs rounded bg-red-600 hover:bg-red-500 text-white"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+        {bulkStatus?.active && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>
+                {bulkStatus.operation_type === "stems" ? "Stems" : "Variants"}{" "}
+                {bulkStatus.completed}/{bulkStatus.total}
+                {bulkStatus.current_song_title && (
+                  <> — <span className="text-gray-300">{bulkStatus.current_song_title}</span></>
+                )}
+              </span>
+              {bulkStatus.failed > 0 && (
+                <span className="text-red-400">{bulkStatus.failed} failed</span>
+              )}
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-1.5">
+              <div
+                className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                style={{
+                  width: `${bulkStatus.total > 0 ? (bulkStatus.completed / bulkStatus.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+        {bulkStatus && !bulkStatus.active && bulkStatus.status === "completed" && bulkStatus.total > 0 && (
+          <div className="mt-2 text-xs text-green-400">
+            Completed: {bulkStatus.completed}/{bulkStatus.total}
+            {bulkStatus.failed > 0 && (
+              <span className="text-red-400 ml-2">{bulkStatus.failed} failed</span>
+            )}
+          </div>
+        )}
+        {bulkStatus && !bulkStatus.active && bulkStatus.status === "cancelled" && (
+          <div className="mt-2 text-xs text-yellow-400">
+            Cancelled: {bulkStatus.completed}/{bulkStatus.total} completed
+          </div>
+        )}
+      </div>
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {songs.map((song) => {
           const status = STATUS_STYLES[song.status] || STATUS_STYLES.pending;
