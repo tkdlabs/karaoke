@@ -1,6 +1,6 @@
 # Dynamic EQ Filter for Non-Voice Stem Enrichment
 
-## Status: Feasibility / Experiment
+## Status: Phase 1-3 Implemented
 
 ---
 
@@ -195,15 +195,16 @@ Instead of computing a single global EQ curve for the entire song, **detect the 
 2. **Lower 8 kHz / 16 kHz band strengths** to 0.20 / 0.25. Conservative reduction.
 3. A/B test on 3–5 songs spanning genres (ballad, pop, rock, R&B).
 
-### Phase 2 — Dynamic EQ (if Phase 1 insufficient)
-4. Implement voice-silence-gated EQ as described above, with 2–3s chunks and hybrid threshold.
-5. Requires reading the vocal stem PCM (one additional decode call).
+### Phase 2 — Dynamic EQ ✅ IMPLEMENTED
+4. Voice-silence-gated EQ with 3s chunks and hybrid threshold (-40 dBFS absolute / bottom 30% percentile fallback).
+5. `_compute_eq_filter()` now accepts optional `vocals_path` parameter.
 6. A/B test against Phase 1 baseline.
 
-### Phase 3 — Progressive EQ (section-adaptive)
-7. Segment the song into regions and compute per-section EQ corrections.
-8. Use `asendcmd` to schedule gain changes at section boundaries with 1–2s ramps.
-9. Can combine with silence-gating per section for maximum accuracy.
+### Phase 3 — Progressive EQ (section-adaptive) ✅ IMPLEMENTED
+7. `_compute_progressive_eq_filter()` segments song into 30s sections with per-section EQ.
+8. Uses `asendcmd` with named `equalizer@e<hz>` instances, gain changes scheduled 1s before section boundaries.
+9. Combines with silence-gating per section.
+10. Auto-selected for songs >60s; falls back to Phase 2 static EQ for shorter songs or on failure.
 
 ### Phase 4 — Refinement
 10. Per-band silence detection (Alternative D).

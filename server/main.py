@@ -961,13 +961,18 @@ def _read_pcm_mono(path: Path, sample_rate: int = 22050) -> "np.ndarray":
   return np.frombuffer(result.stdout, dtype=np.float32)
 
 
-def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
+def _compute_eq_filter(
+  original_path: Path,
+  instrumental_path: Path,
+  vocals_path: Path | None = None,
+) -> str:
   """Measure per-band gain difference between original and instrumental, return ffmpeg filter string.
 
-  Uses 10-second FFT chunks averaged over the whole file.  For each octave-band
-  centre frequency the raw correction is scaled by _EQ_BAND_STRENGTH (low in the
-  vocal range where spectral holes are expected, higher in bass/treble where losses
-  are separation artifacts) then clamped to ±_EQ_MAX_GAIN_DB dB.
+  Uses 3-second FFT chunks.  If vocals_path is provided, only chunks where the
+  vocal stem has low energy are used (voice-silence-gating), ensuring EQ correction
+  reflects separation artifacts rather than expected vocal absence.
+  Uses a hybrid threshold: absolute (-40 dBFS) first, falls back to bottom 30%
+  by percentile if fewer than 3 chunks qualify.
   Returns an empty string if numpy is unavailable or analysis fails.
   """
   try:
@@ -984,13 +989,46 @@ def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
     orig = orig[:length]
     inst = inst[:length]
 
-    chunk = sr * 10
+    chunk = sr * 3
     n_chunks = max(1, length // chunk)
     half = chunk // 2 + 1
+
+    # Determine qualifying chunks via voice-silence gating
+    if vocals_path is not None:
+      vox = _read_pcm_mono(vocals_path, sr)
+      vox = vox[:length]
+      if len(vox) < length:
+        vox = np.pad(vox, (0, length - len(vox)))
+
+      chunk_rms = []
+      for k in range(n_chunks):
+        v = vox[k * chunk : (k + 1) * chunk]
+        if len(v) < chunk:
+          v = np.pad(v, (0, chunk - len(v)))
+        rms = np.sqrt(np.mean(v ** 2))
+        chunk_rms.append(rms)
+      chunk_rms = np.array(chunk_rms)
+
+      # Hybrid threshold: absolute first, fall back to percentile
+      abs_threshold = 10 ** (-40 / 20)  # -40 dBFS
+      qualifying = chunk_rms < abs_threshold
+      if qualifying.sum() < 3:
+        pct_threshold = np.percentile(chunk_rms, 30)
+        qualifying = chunk_rms <= pct_threshold
+      log.debug(f"EQ silence-gating: {qualifying.sum()}/{n_chunks} chunks qualify")
+    else:
+      qualifying = np.ones(n_chunks, dtype=bool)
+
+    if qualifying.sum() == 0:
+      log.warning("EQ analysis: zero qualifying chunks, skipping")
+      return ""
+
     orig_pwr = np.zeros(half)
     inst_pwr = np.zeros(half)
 
     for k in range(n_chunks):
+      if not qualifying[k]:
+        continue
       o = orig[k * chunk : (k + 1) * chunk]
       i = inst[k * chunk : (k + 1) * chunk]
       if len(o) < chunk:
@@ -1018,6 +1056,160 @@ def _compute_eq_filter(original_path: Path, instrumental_path: Path) -> str:
     return ",".join(parts)
   except Exception as e:
     log.warning(f"EQ analysis failed, skipping: {e}")
+    return ""
+
+
+def _compute_progressive_eq_filter(
+  original_path: Path,
+  instrumental_path: Path,
+  vocals_path: Path | None = None,
+  section_duration: float = 30.0,
+) -> str:
+  """Compute section-adaptive EQ using asendcmd for time-varying gain changes.
+
+  Segments the song into sections of section_duration seconds, computes per-section
+  EQ correction (with optional voice-silence gating), and returns an ffmpeg filter
+  string using named equalizer instances + asendcmd to schedule per-band gain
+  changes at section boundaries with 1-second linear ramps.
+  Falls back to static EQ string for songs with only one section.
+  Returns empty string if analysis fails.
+  """
+  try:
+    import numpy as np
+  except ImportError:
+    return ""
+
+  try:
+    sr = 22050
+    orig = _read_pcm_mono(original_path, sr)
+    inst = _read_pcm_mono(instrumental_path, sr)
+
+    length = min(len(orig), len(inst))
+    orig = orig[:length]
+    inst = inst[:length]
+
+    duration = length / sr
+    n_sections = max(1, int(duration / section_duration))
+
+    # For single-section songs, fall back to static EQ
+    if n_sections <= 1:
+      log.debug("Progressive EQ: single section, falling back to static EQ")
+      return _compute_eq_filter(original_path, instrumental_path, vocals_path)
+
+    # Decode vocals if provided
+    vox = None
+    if vocals_path is not None:
+      vox = _read_pcm_mono(vocals_path, sr)
+      vox = vox[:length]
+      if len(vox) < length:
+        vox = np.pad(vox, (0, length - len(vox)))
+
+    chunk = sr * 3  # 3-second chunks for silence gating within sections
+
+    # Compute per-section gains
+    section_gains: list[dict[int, float]] = []
+    for sec_idx in range(n_sections):
+      sec_start = int(sec_idx * section_duration * sr)
+      sec_end = min(int((sec_idx + 1) * section_duration * sr), length)
+      sec_len = sec_end - sec_start
+
+      if sec_len < sr:  # skip sections shorter than 1s
+        continue
+
+      sec_orig = orig[sec_start:sec_end]
+      sec_inst = inst[sec_start:sec_end]
+
+      n_chunks = max(1, sec_len // chunk)
+      half = chunk // 2 + 1
+
+      # Silence gating within this section
+      if vox is not None:
+        sec_vox = vox[sec_start:sec_end]
+        chunk_rms = []
+        for k in range(n_chunks):
+          v = sec_vox[k * chunk : (k + 1) * chunk]
+          if len(v) < chunk:
+            v = np.pad(v, (0, chunk - len(v)))
+          rms = np.sqrt(np.mean(v ** 2))
+          chunk_rms.append(rms)
+        chunk_rms_arr = np.array(chunk_rms)
+
+        abs_threshold = 10 ** (-40 / 20)
+        qualifying = chunk_rms_arr < abs_threshold
+        if qualifying.sum() < 3:
+          pct_threshold = np.percentile(chunk_rms_arr, 30)
+          qualifying = chunk_rms_arr <= pct_threshold
+        log.debug(
+          f"Progressive EQ section {sec_idx}: {qualifying.sum()}/{n_chunks} chunks qualify"
+        )
+      else:
+        qualifying = np.ones(n_chunks, dtype=bool)
+
+      if qualifying.sum() == 0:
+        # No qualifying chunks in this section — use zero gains
+        section_gains.append({hz: 0.0 for hz in _EQ_BANDS_HZ})
+        continue
+
+      orig_pwr = np.zeros(half)
+      inst_pwr = np.zeros(half)
+      for k in range(n_chunks):
+        if not qualifying[k]:
+          continue
+        o = sec_orig[k * chunk : (k + 1) * chunk]
+        i = sec_inst[k * chunk : (k + 1) * chunk]
+        if len(o) < chunk:
+          o = np.pad(o, (0, chunk - len(o)))
+          i = np.pad(i, (0, chunk - len(i)))
+        orig_pwr += np.abs(np.fft.rfft(o)) ** 2
+        inst_pwr += np.abs(np.fft.rfft(i)) ** 2
+
+      freqs = np.fft.rfftfreq(chunk, 1.0 / sr)
+      gains: dict[int, float] = {}
+      for hz in _EQ_BANDS_HZ:
+        mask = (freqs >= hz / 1.5) & (freqs <= hz * 1.5)
+        if not mask.any():
+          gains[hz] = 0.0
+          continue
+        o_band = orig_pwr[mask].mean()
+        i_band = inst_pwr[mask].mean()
+        if o_band < 1e-12 or i_band < 1e-12:
+          gains[hz] = 0.0
+          continue
+        gain_db = 10.0 * np.log10(o_band / i_band)
+        gain_db = gain_db * _EQ_BAND_STRENGTH.get(hz, 0.2)
+        gain_db = max(-_EQ_MAX_GAIN_DB, min(_EQ_MAX_GAIN_DB, gain_db))
+        if abs(gain_db) < 0.5:
+          gain_db = 0.0
+        gains[hz] = round(gain_db, 1)
+      section_gains.append(gains)
+
+    if not section_gains:
+      return ""
+
+    # Build named equalizer filter instances initialized at g=0
+    eq_parts = []
+    for hz in _EQ_BANDS_HZ:
+      eq_parts.append(f"equalizer@e{hz}=f={hz}:width_type=o:width=1:g=0")
+
+    # Build asendcmd commands for section boundaries
+    cmds = []
+    for sec_idx, gains in enumerate(section_gains):
+      # Schedule gains 1s before section boundary for linear ramp,
+      # except first section at t=0
+      if sec_idx == 0:
+        t = 0.0
+      else:
+        t = max(0.0, sec_idx * section_duration - 1.0)
+      for hz in _EQ_BANDS_HZ:
+        g = gains.get(hz, 0.0)
+        cmds.append(f"{t:.1f} equalizer@e{hz} g {g}")
+
+    sendcmd = "asendcmd=c='" + "; ".join(cmds) + "'"
+
+    log.debug(f"Progressive EQ: {len(section_gains)} sections, {len(cmds)} commands")
+    return ",".join(eq_parts) + "," + sendcmd
+  except Exception as e:
+    log.warning(f"Progressive EQ analysis failed, skipping: {e}")
     return ""
 
 
@@ -1072,9 +1264,33 @@ def _variants_worker(
   # Pre-compute the EQ correction filter once for this song (applied to non-100% vocal variants)
   eq_filter = ""
   if eq_match:
-    log.info(f"Computing frequency-dependent EQ correction for {song_id}...")
-    eq_filter = _compute_eq_filter(original_path, instrumental_path)
-    log.info(f"EQ filter: {eq_filter or '(none)'}")
+    # Determine song duration to choose EQ mode
+    try:
+      _probe = _sp.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(original_path)],
+        capture_output=True, text=True, timeout=30,
+      )
+      _song_duration = float(_probe.stdout.strip()) if _probe.returncode == 0 else 0.0
+    except Exception:
+      _song_duration = 0.0
+
+    if _song_duration > 60.0:
+      log.info(f"Computing progressive section-adaptive EQ for {song_id} ({_song_duration:.0f}s)...")
+      eq_filter = _compute_progressive_eq_filter(
+        original_path, instrumental_path, vocals_path,
+      )
+      if eq_filter:
+        log.info(f"Progressive EQ mode active for {song_id}")
+      else:
+        log.info(f"Progressive EQ returned empty, falling back to silence-gated static EQ for {song_id}")
+        eq_filter = _compute_eq_filter(original_path, instrumental_path, vocals_path)
+    else:
+      log.info(f"Computing silence-gated static EQ for {song_id} ({_song_duration:.0f}s)...")
+      eq_filter = _compute_eq_filter(original_path, instrumental_path, vocals_path)
+    log.info(
+      f"EQ filter: {eq_filter[:200] + '...' if len(eq_filter) > 200 else eq_filter or '(none)'}"
+    )
 
   # Harmonic exciter filter for restoring brightness
   exciter_filter = ""
