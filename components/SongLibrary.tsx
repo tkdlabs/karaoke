@@ -112,8 +112,8 @@ interface SongLibraryProps {
   deletingIds: Set<string>;
   onSongsRefresh: () => void;
   bulkStatus: BulkStatus | null;
-  onStartBulkStems: (opts: { eq_match: boolean; exciter: boolean }) => void;
-  onStartBulkVariants: (opts: { eq_match: boolean; exciter: boolean }) => void;
+  onStartBulkStems: (opts: { eq_match: boolean; exciter: boolean; clear_existing: boolean }) => void;
+  onStartBulkVariants: (opts: { eq_match: boolean; exciter: boolean; clear_existing: boolean }) => void;
   onCancelBulk: () => void;
 }
 
@@ -149,6 +149,7 @@ export function SongLibrary({
   const [exciterFlags, setExciterFlags] = useState<Record<string, boolean>>({});
   const [bulkEqMatch, setBulkEqMatch] = useState(false);
   const [bulkExciter, setBulkExciter] = useState(false);
+  const [bulkClearExisting, setBulkClearExisting] = useState(false);
 
   if (songs.length === 0) {
     return (
@@ -190,19 +191,29 @@ export function SongLibrary({
             />
             Exciter
           </label>
+          <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={bulkClearExisting}
+              onChange={(e) => setBulkClearExisting(e.target.checked)}
+              className="accent-orange-500"
+              disabled={bulkStatus?.active ?? false}
+            />
+            Clear existing
+          </label>
           <button
-            onClick={() => onStartBulkStems({ eq_match: bulkEqMatch, exciter: bulkExciter })}
+            onClick={() => onStartBulkStems({ eq_match: bulkEqMatch, exciter: bulkExciter, clear_existing: bulkClearExisting })}
             disabled={bulkStatus?.active ?? false}
             className="px-3 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           >
-            Regen All Stems
+            {bulkClearExisting ? "Regen All Stems" : "Regen Missing Stems"}
           </button>
           <button
-            onClick={() => onStartBulkVariants({ eq_match: bulkEqMatch, exciter: bulkExciter })}
+            onClick={() => onStartBulkVariants({ eq_match: bulkEqMatch, exciter: bulkExciter, clear_existing: bulkClearExisting })}
             disabled={bulkStatus?.active ?? false}
             className="px-3 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           >
-            Regen All Variants
+            {bulkClearExisting ? "Regen All Variants" : "Regen Missing Variants"}
           </button>
           {bulkStatus?.active && (
             <button

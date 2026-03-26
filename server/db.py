@@ -58,6 +58,7 @@ def init_db() -> None:
             operation_type TEXT NOT NULL,
             eq_match INTEGER NOT NULL DEFAULT 0,
             exciter INTEGER NOT NULL DEFAULT 0,
+            clear_existing INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'active',
             total INTEGER NOT NULL DEFAULT 0,
             completed INTEGER NOT NULL DEFAULT 0,
@@ -102,6 +103,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col, col_type in new_columns.items():
         if col not in existing:
             conn.execute(f"ALTER TABLE songs ADD COLUMN {col} {col_type}")
+
+    # Migrate bulk_operations table
+    bulk_exists = conn.execute(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='bulk_operations'"
+    ).fetchone()
+    if bulk_exists:
+      bulk_cols = {row[1] for row in conn.execute("PRAGMA table_info(bulk_operations)").fetchall()}
+      if "clear_existing" not in bulk_cols:
+        conn.execute("ALTER TABLE bulk_operations ADD COLUMN clear_existing INTEGER NOT NULL DEFAULT 0")
 
 
 def insert_song(song: dict) -> dict:

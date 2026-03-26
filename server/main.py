@@ -881,11 +881,17 @@ def start_bulk_stems(req: BulkStemsRequest):
 
   # Discover eligible songs
   if req.song_ids is None:
-    eligible = [
-      s for s in db.list_songs()
-      if s["status"] == "ready"
-      and s.get("stems_status") in (None, "error")
-    ]
+    if req.clear_existing:
+      eligible = [
+        s for s in db.list_songs()
+        if s["status"] == "ready"
+      ]
+    else:
+      eligible = [
+        s for s in db.list_songs()
+        if s["status"] == "ready"
+        and s.get("stems_status") in (None, "error")
+      ]
     song_ids = [s["id"] for s in eligible]
   else:
     song_ids = []
@@ -908,6 +914,7 @@ def start_bulk_stems(req: BulkStemsRequest):
     "operation_type": "stems",
     "eq_match": int(req.eq_match),
     "exciter": int(req.exciter),
+    "clear_existing": int(req.clear_existing),
     "status": "active",
     "total": len(song_ids),
     "completed": 0,
@@ -929,7 +936,8 @@ def start_bulk_stems(req: BulkStemsRequest):
 
   log.info(
     f"Bulk stems started: {len(song_ids)} songs, "
-    f"eq_match={req.eq_match}, exciter={req.exciter}"
+    f"eq_match={req.eq_match}, exciter={req.exciter}, "
+    f"clear_existing={req.clear_existing}"
   )
   return BulkOperationResponse(
     operation_id=operation_id,
@@ -950,11 +958,17 @@ def start_bulk_variants(req: BulkVariantsRequest):
 
   # Discover eligible songs
   if req.song_ids is None:
-    eligible = [
-      s for s in db.list_songs()
-      if s.get("stems_status") == "ready"
-      and s.get("variants_status") in (None, "error")
-    ]
+    if req.clear_existing:
+      eligible = [
+        s for s in db.list_songs()
+        if s.get("stems_status") == "ready"
+      ]
+    else:
+      eligible = [
+        s for s in db.list_songs()
+        if s.get("stems_status") == "ready"
+        and s.get("variants_status") in (None, "error")
+      ]
     song_ids = [s["id"] for s in eligible]
   else:
     song_ids = []
@@ -977,6 +991,7 @@ def start_bulk_variants(req: BulkVariantsRequest):
     "operation_type": "variants",
     "eq_match": int(req.eq_match),
     "exciter": int(req.exciter),
+    "clear_existing": int(req.clear_existing),
     "status": "active",
     "total": len(song_ids),
     "completed": 0,
@@ -998,7 +1013,8 @@ def start_bulk_variants(req: BulkVariantsRequest):
 
   log.info(
     f"Bulk variants started: {len(song_ids)} songs, "
-    f"eq_match={req.eq_match}, exciter={req.exciter}"
+    f"eq_match={req.eq_match}, exciter={req.exciter}, "
+    f"clear_existing={req.clear_existing}"
   )
   return BulkOperationResponse(
     operation_id=operation_id,
@@ -1687,6 +1703,7 @@ def _bulk_worker(operation_id: str) -> None:
   operation_type = op["operation_type"]
   eq_match = bool(op["eq_match"])
   exciter = bool(op["exciter"])
+  clear_existing = bool(op.get("clear_existing", 0))
   queue = _json.loads(op["queue"])
   errors = _json.loads(op["errors"])
   completed = op["completed"]
@@ -1701,6 +1718,34 @@ def _bulk_worker(operation_id: str) -> None:
 
     db.update_bulk(operation_id, current_song_id=song_id)
     song = db.get_song(song_id)
+
+    # Clear existing data before re-processing if requested
+    if clear_existing and song:
+      if operation_type == "stems":
+        for key in ("vocals_filename", "instrumental_filename"):
+          if song.get(key):
+            audio_path = AUDIO_DIR / song[key]
+            if audio_path.exists():
+              audio_path.unlink()
+        db.update_song(
+          song_id,
+          vocals_filename=None,
+          instrumental_filename=None,
+          stems_status=None,
+          stems_error=None,
+        )
+        song = db.get_song(song_id)
+      else:  # variants
+        variants_dir = VARIANTS_DIR / song_id
+        if variants_dir.exists():
+          shutil.rmtree(variants_dir)
+        db.update_song(
+          song_id,
+          variants_status=None,
+          variants_error=None,
+          variants_progress=None,
+        )
+        song = db.get_song(song_id)
 
     if _bulk_should_skip(song, operation_type):
       queue.remove(song_id)

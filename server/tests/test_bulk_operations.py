@@ -48,9 +48,9 @@ def _insert_active_bulk(data_dir: Path) -> str:
   conn.execute(
     """
     INSERT INTO bulk_operations
-      (id, operation_type, eq_match, exciter, status, total, completed,
-       failed, queue, errors, current_song_id, created_at, updated_at)
-    VALUES (?, ?, 0, 0, 'active', 2, 0, 0, '[]', '{}', NULL, ?, ?)
+      (id, operation_type, eq_match, exciter, clear_existing, status, total,
+       completed, failed, queue, errors, current_song_id, created_at, updated_at)
+    VALUES (?, ?, 0, 0, 0, 'active', 2, 0, 0, '[]', '{}', NULL, ?, ?)
     """,
     (op_id, "stems", now, now),
   )
@@ -226,3 +226,64 @@ class TestBulkCancel:
   def test_cancel_not_available_in_serve_mode(self, serve_mode_client: TestClient) -> None:
     resp = serve_mode_client.post("/api/bulk/cancel")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# clear_existing flag
+# ---------------------------------------------------------------------------
+
+
+class TestBulkClearExisting:
+  """Tests for clear_existing flag on bulk endpoints."""
+
+  def test_stems_skips_existing_by_default(self, full_mode_client: TestClient) -> None:
+    data_dir = _data_dir_from_client(full_mode_client)
+    insert_test_song(data_dir, _SONG_A, status="ready", extra={"stems_status": "ready"})
+
+    resp = full_mode_client.post("/api/bulk/stems", json={})
+    assert resp.status_code == 400
+    assert "No eligible" in resp.json()["detail"]
+
+  def test_stems_includes_existing_when_clear(self, full_mode_client: TestClient) -> None:
+    data_dir = _data_dir_from_client(full_mode_client)
+    insert_test_song(data_dir, _SONG_A, status="ready", extra={"stems_status": "ready"})
+
+    with patch.object(sys.modules["main"].threading, "Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/bulk/stems", json={"clear_existing": True}
+      )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert _SONG_A in body["song_ids"]
+    assert body["total"] == 1
+
+  def test_variants_skips_existing_by_default(self, full_mode_client: TestClient) -> None:
+    data_dir = _data_dir_from_client(full_mode_client)
+    insert_test_song(
+      data_dir, _SONG_A, status="ready",
+      extra={"stems_status": "ready", "variants_status": "ready"},
+    )
+
+    resp = full_mode_client.post("/api/bulk/variants", json={})
+    assert resp.status_code == 400
+    assert "No eligible" in resp.json()["detail"]
+
+  def test_variants_includes_existing_when_clear(self, full_mode_client: TestClient) -> None:
+    data_dir = _data_dir_from_client(full_mode_client)
+    insert_test_song(
+      data_dir, _SONG_A, status="ready",
+      extra={"stems_status": "ready", "variants_status": "ready"},
+    )
+
+    with patch.object(sys.modules["main"].threading, "Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/bulk/variants", json={"clear_existing": True}
+      )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert _SONG_A in body["song_ids"]
+    assert body["total"] == 1

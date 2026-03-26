@@ -189,7 +189,7 @@ export default function Home() {
     }
   };
 
-  const handleStartBulkStems = async (opts: { eq_match: boolean; exciter: boolean }) => {
+  const handleStartBulkStems = async (opts: { eq_match: boolean; exciter: boolean; clear_existing: boolean }) => {
     try {
       await startBulkStems(opts);
       const status = await getBulkStatus();
@@ -199,7 +199,7 @@ export default function Home() {
     }
   };
 
-  const handleStartBulkVariants = async (opts: { eq_match: boolean; exciter: boolean }) => {
+  const handleStartBulkVariants = async (opts: { eq_match: boolean; exciter: boolean; clear_existing: boolean }) => {
     try {
       await startBulkVariants(opts);
       const status = await getBulkStatus();

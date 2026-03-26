@@ -180,6 +180,7 @@ export interface BulkRequest {
   song_ids?: string[];
   eq_match: boolean;
   exciter: boolean;
+  clear_existing: boolean;
 }
 
 export interface BulkOperationResponse {
