@@ -84,6 +84,7 @@ export async function deleteSongLyrics(songId: string): Promise<Song> {
 export interface AudioEnhanceOptions {
   eq_match: boolean;
   exciter: boolean;
+  deep_clean?: boolean;
 }
 
 export async function startStems(songId: string, opts: AudioEnhanceOptions): Promise<Song> {
@@ -180,6 +181,7 @@ export interface BulkRequest {
   song_ids?: string[];
   eq_match: boolean;
   exciter: boolean;
+  deep_clean: boolean;
   clear_existing: boolean;
 }
 

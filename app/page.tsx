@@ -108,7 +108,7 @@ export default function Home() {
     }
   };
 
-  const handleStartStems = async (songId: string, opts: { eq_match: boolean; exciter: boolean }) => {
+  const handleStartStems = async (songId: string, opts: { eq_match: boolean; exciter: boolean; deep_clean: boolean }) => {
     try {
       await startStems(songId, opts);
       await loadSongs();
@@ -189,7 +189,7 @@ export default function Home() {
     }
   };
 
-  const handleStartBulkStems = async (opts: { eq_match: boolean; exciter: boolean; clear_existing: boolean }) => {
+  const handleStartBulkStems = async (opts: { eq_match: boolean; exciter: boolean; deep_clean: boolean; clear_existing: boolean }) => {
     try {
       await startBulkStems(opts);
       const status = await getBulkStatus();
@@ -199,7 +199,7 @@ export default function Home() {
     }
   };
 
-  const handleStartBulkVariants = async (opts: { eq_match: boolean; exciter: boolean; clear_existing: boolean }) => {
+  const handleStartBulkVariants = async (opts: { eq_match: boolean; exciter: boolean; deep_clean: boolean; clear_existing: boolean }) => {
     try {
       await startBulkVariants(opts);
       const status = await getBulkStatus();
