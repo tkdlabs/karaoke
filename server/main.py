@@ -930,8 +930,8 @@ _EQ_BAND_STRENGTH: dict[int, float] = {
   1000: 0.10,  # mid — vocal core
   2000: 0.10,  # upper-mid — vocal presence
   4000: 0.30,  # presence — sibilance removed, partial restore
-  8000: 0.40,  # brilliance — breath/air removed by separation
-  16000: 0.45,  # air — high-freq artifacts from separation
+  8000: 0.20,  # brilliance — reduced from 0.40 to avoid over-correcting high frequencies
+  16000: 0.25,  # air — reduced from 0.45 to avoid over-correcting high frequencies
 }
 
 
@@ -1044,12 +1044,13 @@ def _build_pitch_filter(semitones: float, sample_rate: int = 44100) -> str:
 def _build_exciter_filter() -> str:
   """Build an ffmpeg aexciter filter to restore brightness lost during vocal removal.
 
-  Generates harmonics above the cutoff frequency with moderate drive and blend
+  Generates harmonics above the cutoff frequency with gentle drive and blend
   to add perceived air/presence without the artificial feel of static EQ boosting.
-  Parameters: freq=4000 (process above 4 kHz), drive=4 (moderate harmonic generation),
-  blend=2 (mix harmonics into output), amount=2 (subtle effect level).
+  Parameters: freq=4000 (process above 4 kHz), drive=2 (gentle harmonic generation,
+  reduced from 4 to avoid excessive harmonics above 4 kHz), blend=1 (mix harmonics
+  into output), amount=1 (subtle effect level).
   """
-  return "aexciter=freq=4000:drive=4:blend=2:amount=2"
+  return "aexciter=freq=4000:drive=2:blend=1:amount=1"
 
 
 def _variants_worker(
