@@ -587,7 +587,7 @@ def start_stems(song_id: str, req: VariantsRequest = VariantsRequest()):
       AUDIO_DIR / instrumental_filename,
       req.eq_match,
       req.exciter,
-      req.deep_clean,
+      req.passes,
     ),
     daemon=True,
   )
@@ -915,7 +915,7 @@ def start_bulk_stems(req: BulkStemsRequest):
     "operation_type": "stems",
     "eq_match": int(req.eq_match),
     "exciter": int(req.exciter),
-    "deep_clean": int(req.deep_clean),
+    "passes": req.passes,
     "clear_existing": int(req.clear_existing),
     "status": "active",
     "total": len(song_ids),
@@ -939,7 +939,7 @@ def start_bulk_stems(req: BulkStemsRequest):
   log.info(
     f"Bulk stems started: {len(song_ids)} songs, "
     f"eq_match={req.eq_match}, exciter={req.exciter}, "
-    f"deep_clean={req.deep_clean}, clear_existing={req.clear_existing}"
+    f"passes={req.passes}, clear_existing={req.clear_existing}"
   )
   return BulkOperationResponse(
     operation_id=operation_id,
@@ -993,7 +993,7 @@ def start_bulk_variants(req: BulkVariantsRequest):
     "operation_type": "variants",
     "eq_match": int(req.eq_match),
     "exciter": int(req.exciter),
-    "deep_clean": int(req.deep_clean),
+    "passes": req.passes,
     "clear_existing": int(req.clear_existing),
     "status": "active",
     "total": len(song_ids),
@@ -1017,7 +1017,7 @@ def start_bulk_variants(req: BulkVariantsRequest):
   log.info(
     f"Bulk variants started: {len(song_ids)} songs, "
     f"eq_match={req.eq_match}, exciter={req.exciter}, "
-    f"deep_clean={req.deep_clean}, clear_existing={req.clear_existing}"
+    f"passes={req.passes}, clear_existing={req.clear_existing}"
   )
   return BulkOperationResponse(
     operation_id=operation_id,
@@ -1604,13 +1604,13 @@ def _stems_worker(
   instrumental_out: Path,
   eq_match: bool = False,
   exciter: bool = False,
-  deep_clean: bool = False,
+  passes: int = 1,
 ) -> None:
   """Background worker for Demucs stem separation."""
-  log.info(f"Stems started: {song_id} (deep_clean={deep_clean})")
+  log.info(f"Stems started: {song_id} (passes={passes})")
   try:
-    if deep_clean:
-      demucs.separate_iterative(video_path, vocals_out, instrumental_out)
+    if passes > 1:
+      demucs.separate_multipass(video_path, vocals_out, instrumental_out, passes=passes)
     else:
       demucs.separate(video_path, vocals_out, instrumental_out)
     db.update_song(song_id, stems_status="ready")
@@ -1652,7 +1652,7 @@ def _bulk_should_skip(song: dict | None, operation_type: str) -> bool:
 
 
 def _run_single_stems(
-  song_id: str, song: dict, eq_match: bool, exciter: bool, deep_clean: bool = False
+  song_id: str, song: dict, eq_match: bool, exciter: bool, passes: int = 1
 ) -> None:
   """Set up and run stem separation synchronously for one song."""
   vocals_filename = f"{song_id}_vocals.mp3"
@@ -1672,7 +1672,7 @@ def _run_single_stems(
     AUDIO_DIR / instrumental_filename,
     eq_match,
     exciter,
-    deep_clean,
+    passes,
   )
 
 
@@ -1711,7 +1711,7 @@ def _bulk_worker(operation_id: str) -> None:
   operation_type = op["operation_type"]
   eq_match = bool(op["eq_match"])
   exciter = bool(op["exciter"])
-  deep_clean = bool(op.get("deep_clean", 0))
+  passes = op.get("passes", 1)
   clear_existing = bool(op.get("clear_existing", 0))
   queue = _json.loads(op["queue"])
   errors = _json.loads(op["errors"])
@@ -1769,7 +1769,7 @@ def _bulk_worker(operation_id: str) -> None:
 
     try:
       if operation_type == "stems":
-        _run_single_stems(song_id, song, eq_match, exciter, deep_clean)
+        _run_single_stems(song_id, song, eq_match, exciter, passes)
       else:
         _run_single_variants(song_id, song, eq_match, exciter)
 

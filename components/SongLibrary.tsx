@@ -96,7 +96,7 @@ interface SongLibraryProps {
   onDelete: (id: string) => void;
   onLyricsSearch: (song: Song) => void;
   onLyricsDelete: (songId: string) => void;
-  onStartStems: (songId: string, opts: { eq_match: boolean; exciter: boolean; deep_clean: boolean }) => void;
+  onStartStems: (songId: string, opts: { eq_match: boolean; exciter: boolean; passes: number }) => void;
   onDeleteStems: (songId: string) => void;
   onStartExport: (songId: string, vocalLevel: number) => void;
   onDeleteExport: (songId: string) => void;
@@ -112,8 +112,8 @@ interface SongLibraryProps {
   deletingIds: Set<string>;
   onSongsRefresh: () => void;
   bulkStatus: BulkStatus | null;
-  onStartBulkStems: (opts: { eq_match: boolean; exciter: boolean; deep_clean: boolean; clear_existing: boolean }) => void;
-  onStartBulkVariants: (opts: { eq_match: boolean; exciter: boolean; deep_clean: boolean; clear_existing: boolean }) => void;
+  onStartBulkStems: (opts: { eq_match: boolean; exciter: boolean; passes: number; clear_existing: boolean }) => void;
+  onStartBulkVariants: (opts: { eq_match: boolean; exciter: boolean; passes: number; clear_existing: boolean }) => void;
   onCancelBulk: () => void;
 }
 
@@ -147,10 +147,10 @@ export function SongLibrary({
   const [editingLyricsSong, setEditingLyricsSong] = useState<Song | null>(null);
   const [eqMatchFlags, setEqMatchFlags] = useState<Record<string, boolean>>({});
   const [exciterFlags, setExciterFlags] = useState<Record<string, boolean>>({});
-  const [deepCleanFlags, setDeepCleanFlags] = useState<Record<string, boolean>>({});
+  const [passesFlags, setPassesFlags] = useState<Record<string, number>>({});
   const [bulkEqMatch, setBulkEqMatch] = useState(false);
   const [bulkExciter, setBulkExciter] = useState(false);
-  const [bulkDeepClean, setBulkDeepClean] = useState(false);
+  const [bulkPasses, setBulkPasses] = useState(1);
   const [bulkClearExisting, setBulkClearExisting] = useState(false);
 
   if (songs.length === 0) {
@@ -195,13 +195,15 @@ export function SongLibrary({
           </label>
           <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
             <input
-              type="checkbox"
-              checked={bulkDeepClean}
-              onChange={(e) => setBulkDeepClean(e.target.checked)}
-              className="accent-emerald-500"
+              type="range"
+              min={1}
+              max={3}
+              value={bulkPasses}
+              onChange={(e) => setBulkPasses(Number(e.target.value))}
+              className="w-16 accent-emerald-500"
               disabled={bulkStatus?.active ?? false}
             />
-            Deep clean
+            Passes: {bulkPasses}
           </label>
           <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
             <input
@@ -214,14 +216,14 @@ export function SongLibrary({
             Clear existing
           </label>
           <button
-            onClick={() => onStartBulkStems({ eq_match: bulkEqMatch, exciter: bulkExciter, deep_clean: bulkDeepClean, clear_existing: bulkClearExisting })}
+            onClick={() => onStartBulkStems({ eq_match: bulkEqMatch, exciter: bulkExciter, passes: bulkPasses, clear_existing: bulkClearExisting })}
             disabled={bulkStatus?.active ?? false}
             className="px-3 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           >
             {bulkClearExisting ? "Regen All Stems" : "Regen Missing Stems"}
           </button>
           <button
-            onClick={() => onStartBulkVariants({ eq_match: bulkEqMatch, exciter: bulkExciter, deep_clean: bulkDeepClean, clear_existing: bulkClearExisting })}
+            onClick={() => onStartBulkVariants({ eq_match: bulkEqMatch, exciter: bulkExciter, passes: bulkPasses, clear_existing: bulkClearExisting })}
             disabled={bulkStatus?.active ?? false}
             className="px-3 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           >
@@ -385,7 +387,7 @@ export function SongLibrary({
                   {song.stems_status !== "ready" && (
                     <>
                       <button
-                        onClick={() => onStartStems(song.id, { eq_match: eqMatchFlags[song.id] ?? false, exciter: exciterFlags[song.id] ?? false, deep_clean: deepCleanFlags[song.id] ?? false })}
+                        onClick={() => onStartStems(song.id, { eq_match: eqMatchFlags[song.id] ?? false, exciter: exciterFlags[song.id] ?? false, passes: passesFlags[song.id] ?? 1 })}
                         disabled={!isReady || song.stems_status === "processing"}
                         className="px-2 py-1 text-xs bg-teal-900 hover:bg-teal-800 rounded disabled:opacity-40"
                       >
@@ -421,14 +423,16 @@ export function SongLibrary({
                           </label>
                           <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
                             <input
-                              type="checkbox"
-                              checked={deepCleanFlags[song.id] ?? false}
+                              type="range"
+                              min={1}
+                              max={3}
+                              value={passesFlags[song.id] ?? 1}
                               onChange={(e) =>
-                                setDeepCleanFlags((f) => ({ ...f, [song.id]: e.target.checked }))
+                                setPassesFlags((f) => ({ ...f, [song.id]: Number(e.target.value) }))
                               }
-                              className="accent-teal-500"
+                              className="w-16 accent-teal-500"
                             />
-                            Deep clean
+                            Passes: {passesFlags[song.id] ?? 1}
                           </label>
                         </>
                       )}

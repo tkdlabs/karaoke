@@ -112,8 +112,15 @@ def _sum_stems(stem1: Path, stem2: Path, output: Path) -> None:
     subprocess.run(cmd, check=True, capture_output=True)
 
 
-def separate_iterative(video_path: Path, vocals_out: Path, instrumental_out: Path) -> None:
-    """Two-pass Demucs: extract leaked instrumental from vocals, merge back."""
+def separate_multipass(video_path: Path, vocals_out: Path, instrumental_out: Path, passes: int = 2) -> None:
+    """Multi-pass Demucs: run N passes to recover leaked instrumental from vocals.
+
+    Each pass re-separates the previous vocals, extracting more leaked content.
+    Recovered stems from all passes are summed together.
+    """
+    if passes < 2:
+        raise ValueError("separate_multipass requires passes >= 2")
+
     vocals_out.parent.mkdir(parents=True, exist_ok=True)
     instrumental_out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -123,32 +130,42 @@ def separate_iterative(video_path: Path, vocals_out: Path, instrumental_out: Pat
         # --- Pass 1: original mix ---
         wav_path = tmp_path / "audio.wav"
         extract_audio(video_path, wav_path)
-        stems1_dir = run_demucs(wav_path, tmp_path / "pass1")
+        stems_dirs = [run_demucs(wav_path, tmp_path / "pass1")]
 
-        # --- Pass 2: re-separate vocals from pass 1 ---
-        vocals1 = stems1_dir / "vocals.mp3"
-        if not vocals1.exists():
-            raise FileNotFoundError(f"Pass 1 vocals not found at {vocals1}")
-        stems2_dir = run_demucs(vocals1, tmp_path / "pass2")
+        # --- Additional passes: re-separate vocals from previous pass ---
+        for p in range(2, passes + 1):
+            prev_vocals = stems_dirs[-1] / "vocals.mp3"
+            if not prev_vocals.exists():
+                raise FileNotFoundError(f"Pass {p - 1} vocals not found at {prev_vocals}")
+            stems_dirs.append(run_demucs(prev_vocals, tmp_path / f"pass{p}"))
 
-        # --- Combine per-instrument stems (pass1 + pass2) ---
+        # --- Combine per-instrument stems across all passes ---
         for stem_name in ("drums", "bass", "other"):
-            s1 = stems1_dir / f"{stem_name}.mp3"
-            s2 = stems2_dir / f"{stem_name}.mp3"
             combined = tmp_path / f"{stem_name}_combined.mp3"
-            _sum_stems(s1, s2, combined)
+            base = stems_dirs[0] / f"{stem_name}.mp3"
+            if base.exists():
+                shutil.copy2(base, combined)
 
-        # --- Final vocals = pass 2 vocals ---
-        vocals2 = stems2_dir / "vocals.mp3"
-        if not vocals2.exists():
-            raise FileNotFoundError(f"Pass 2 vocals not found at {vocals2}")
-        shutil.copy2(vocals2, vocals_out)
+            for stems_dir in stems_dirs[1:]:
+                recovered = stems_dir / f"{stem_name}.mp3"
+                if recovered.exists() and combined.exists():
+                    temp_sum = tmp_path / f"{stem_name}_temp.mp3"
+                    _sum_stems(combined, recovered, temp_sum)
+                    shutil.move(str(temp_sum), str(combined))
+                elif recovered.exists():
+                    shutil.copy2(recovered, combined)
+
+        # --- Final vocals = last pass vocals ---
+        last_vocals = stems_dirs[-1] / "vocals.mp3"
+        if not last_vocals.exists():
+            raise FileNotFoundError(f"Pass {passes} vocals not found at {last_vocals}")
+        shutil.copy2(last_vocals, vocals_out)
 
         # --- Final instrumental = combine all combined stems ---
-        combine_instrumental_stems = [
+        combine_stems = [
             tmp_path / f"{s}_combined.mp3" for s in ("drums", "bass", "other")
         ]
-        stems_for_combine = [s for s in combine_instrumental_stems if s.exists()]
+        stems_for_combine = [s for s in combine_stems if s.exists()]
         if not stems_for_combine:
             raise FileNotFoundError("No combined instrumental stems found")
         cmd = ["ffmpeg", "-y"]

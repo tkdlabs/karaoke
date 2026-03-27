@@ -58,7 +58,7 @@ def init_db() -> None:
             operation_type TEXT NOT NULL,
             eq_match INTEGER NOT NULL DEFAULT 0,
             exciter INTEGER NOT NULL DEFAULT 0,
-            deep_clean INTEGER NOT NULL DEFAULT 0,
+            passes INTEGER NOT NULL DEFAULT 1,
             clear_existing INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'active',
             total INTEGER NOT NULL DEFAULT 0,
@@ -115,6 +115,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bulk_operations ADD COLUMN clear_existing INTEGER NOT NULL DEFAULT 0")
       if "deep_clean" not in bulk_cols:
         conn.execute("ALTER TABLE bulk_operations ADD COLUMN deep_clean INTEGER NOT NULL DEFAULT 0")
+      if "passes" not in bulk_cols:
+        conn.execute("ALTER TABLE bulk_operations ADD COLUMN passes INTEGER NOT NULL DEFAULT 1")
 
 
 def insert_song(song: dict) -> dict:

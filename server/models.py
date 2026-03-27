@@ -88,7 +88,7 @@ class OverlayRequest(BaseModel):
 class VariantsRequest(BaseModel):
     eq_match: bool = False  # frequency-dependent EQ correction (gentle in vocal range, stronger in bass/treble)
     exciter: bool = False  # apply harmonic exciter to restore brightness lost during vocal removal
-    deep_clean: bool = False  # run Demucs twice to recover leaked instrumental content
+    passes: int = 1  # 1=standard, 2-3=multi-pass recovery of leaked instrumental
 
 
 class LyricsLine(BaseModel):
@@ -107,7 +107,7 @@ class BulkStemsRequest(BaseModel):
     song_ids: list[str] | None = None
     eq_match: bool = False
     exciter: bool = False
-    deep_clean: bool = False
+    passes: int = 1
     clear_existing: bool = False
 
 
@@ -115,7 +115,7 @@ class BulkVariantsRequest(BaseModel):
     song_ids: list[str] | None = None
     eq_match: bool = False
     exciter: bool = False
-    deep_clean: bool = False
+    passes: int = 1
     clear_existing: bool = False
 
 
