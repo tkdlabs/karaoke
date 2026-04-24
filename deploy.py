@@ -36,7 +36,7 @@ _local_ai_dev = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
 
 sys.path.insert(0, os.path.join(_local_ai_dev, "workflows/deployment/src"))
 
-from deploy_lib import DeployConfig, Deployer, LocalTarget, SSHTarget, add_no_pull_arg, add_no_service_install_arg  # noqa: E402
+from deploy_lib import DeployConfig, Deployer, LocalTarget, SSHTarget, add_no_pull_arg, add_no_service_install_arg, add_recreate_venv_arg  # noqa: E402
 from deploy_lib.steps import step_setup_venv  # noqa: E402
 from deploy_lib.systemd import (  # noqa: E402
   SYSTEMD_STEPS,
@@ -71,6 +71,7 @@ def main() -> None:
   parser.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
   add_no_pull_arg(parser)
   add_no_service_install_arg(parser)
+  add_recreate_venv_arg(parser)
   mode = parser.add_mutually_exclusive_group(required=True)
   mode.add_argument(
     "--serve",
@@ -105,6 +106,7 @@ def main() -> None:
       migrate_data_from="data",
       skip_git_pull=args.no_pull,
       skip_service_install=args.no_service_install,
+      recreate_venv=args.recreate_venv,
     )
     target = SSHTarget(args.host, user=args.user, key_filename=args.key, port=args.port)
     SystemdDeployer(config, target, steps=SERVE_STEPS).deploy()
@@ -128,6 +130,7 @@ def main() -> None:
       migrate_data_from="data",
       kill_stale_ports=True,
       skip_git_pull=args.no_pull,
+      recreate_venv=args.recreate_venv,
     )
     Deployer(config, target).deploy()
 
