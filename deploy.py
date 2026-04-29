@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["jinja2>=3.1", "fabric>=3.0"]
+# ///
 """Deploy Karaoke — full (frontend + backend) or serve-only (backend, systemd).
 
 Usage
