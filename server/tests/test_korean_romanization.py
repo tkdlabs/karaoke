@@ -23,42 +23,28 @@ KOREAN_LRC = "[00:01.00]안녕하세요\n[00:05.00]반갑습니다\n"
 LATIN_LRC = "[00:01.00]Hello world\n[00:05.00]Goodbye world\n"
 
 
-def _configure_lyrics_stub(has_romanizer: bool) -> None:
-  """Patch the already-stubbed karaoke_workflows.lyrics with needed attributes.
+def _configure_lyrics(has_romanizer: bool) -> None:
+  """Set karaoke_lib.lyrics.HAS_KOREAN_ROMANIZER for the current import cycle.
 
-  The conftest installs empty stubs for karaoke_workflows and karaoke_workflows.lyrics.
-  We temporarily remove both so we can import the real package, grab
-  parse_lyrics_content, then restore the stubs with the desired HAS_KOREAN_ROMANIZER.
+  Imported inside the fixture (not at module level) so it reflects the
+  freshly-imported module created by conftest's purge/reload per test.
   """
-  kw_stub = sys.modules["karaoke_workflows"]
-  lyrics_stub = sys.modules["karaoke_workflows.lyrics"]
+  import karaoke_lib.lyrics
 
-  # Temporarily remove both stubs so the real package can be imported
-  del sys.modules["karaoke_workflows"]
-  del sys.modules["karaoke_workflows.lyrics"]
-  try:
-    import karaoke_workflows.lyrics as real_mod
-
-    parse_lyrics_content = real_mod.parse_lyrics_content
-  finally:
-    sys.modules["karaoke_workflows"] = kw_stub
-    sys.modules["karaoke_workflows.lyrics"] = lyrics_stub
-
-  lyrics_stub.HAS_KOREAN_ROMANIZER = has_romanizer
-  lyrics_stub.parse_lyrics_content = parse_lyrics_content
+  karaoke_lib.lyrics.HAS_KOREAN_ROMANIZER = has_romanizer
 
 
 @pytest.fixture()
 def overlay_client_no_romanizer(full_mode_client: TestClient):
   """full_mode_client with HAS_KOREAN_ROMANIZER=False (library not installed)."""
-  _configure_lyrics_stub(has_romanizer=False)
+  _configure_lyrics(has_romanizer=False)
   yield full_mode_client
 
 
 @pytest.fixture()
 def overlay_client_with_romanizer(full_mode_client: TestClient):
   """full_mode_client with HAS_KOREAN_ROMANIZER=True (library installed)."""
-  _configure_lyrics_stub(has_romanizer=True)
+  _configure_lyrics(has_romanizer=True)
   sys.modules["overlay"].create_overlay = MagicMock()
   yield full_mode_client
 

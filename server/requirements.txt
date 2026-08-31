@@ -3,4 +3,6 @@ uvicorn[standard]>=0.27.0
 pydantic>=2.0.0
 python-multipart
 lrcup
--e ../../../workflows/karaoke[korean]
+korean_romanizer
+demucs
+moviepy>=2.0.0

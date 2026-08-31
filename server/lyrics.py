@@ -1,8 +1,9 @@
 """LRC lyrics parsing utilities for the API endpoint.
 
-Parses standard LRC format into (time_ms, text) pairs.
-No dependency on karaoke_workflows — intentionally lightweight so
-the endpoint is available in SERVE_MODE without heavy imports.
+Parses standard LRC format into (time_ms, text) tuples.
+Intentionally lightweight (stdlib only) so the lyrics endpoints work in
+SERVE_MODE without heavy imports — distinct from karaoke_lib.lyrics, which
+produces word-timed LyricLine objects for the overlay renderer.
 """
 
 import re

@@ -1,6 +1,7 @@
 """Lyrics overlay video creation.
 
-Bridges to karaoke_workflows.video to render synced lyrics on a video file.
+Renders synced lyrics on a video file using the local karaoke_lib package
+(bundled from the former karaoke_workflows dependency).
 """
 
 from collections.abc import Callable
@@ -8,8 +9,8 @@ from pathlib import Path
 
 from proglog import ProgressBarLogger
 
-from karaoke_workflows.lyrics import parse_lyrics_content
-from karaoke_workflows.video import create_lyrics_overlay_video
+from karaoke_lib.lyrics import parse_lyrics_content
+from karaoke_lib.video import create_lyrics_overlay_video
 
 
 class _ProgressCallback(ProgressBarLogger):

@@ -771,7 +771,7 @@ def start_overlay(song_id: str):
     raise HTTPException(status_code=409, detail="Overlay rendering already in progress")
 
   # Check upfront if Korean romanization is needed but unavailable
-  from karaoke_workflows.lyrics import HAS_KOREAN_ROMANIZER, parse_lyrics_content
+  from karaoke_lib.lyrics import HAS_KOREAN_ROMANIZER, parse_lyrics_content
 
   has_korean = any(
     any("\uAC00" <= ch <= "\uD7AF" for ch in line.text)
@@ -1139,7 +1139,7 @@ def _make_progress_cb(song_id: str, field: str, interval: float = 2.0):
 
 def _lyrics_need_romanization(lyrics_lrc: str) -> bool:
   """Check if lyrics contain Korean (Hangul) characters that would benefit from romanization."""
-  from karaoke_workflows.lyrics import parse_lyrics_content, romanize_korean
+  from karaoke_lib.lyrics import parse_lyrics_content, romanize_korean
 
   lyrics = parse_lyrics_content(lyrics_lrc)
   return any(romanize_korean(line.text) is not None for line in lyrics)

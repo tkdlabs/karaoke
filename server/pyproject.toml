@@ -7,9 +7,11 @@ dependencies = [
   "fastapi>=0.109.0",
   "uvicorn[standard]>=0.27.0",
   "pydantic>=2.0.0",
-  "yt-dlp",
+  "python-multipart",
   "lrcup",
-  "karaoke-workflows[korean]",
+  "korean_romanizer",
+  "demucs",
+  "moviepy>=2.0.0",
 ]
 
 [build-system]
@@ -18,6 +20,3 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = []
-
-[tool.uv.sources]
-karaoke-workflows = { path = "../../../workflows/karaoke", editable = true }

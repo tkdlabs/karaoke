@@ -49,18 +49,6 @@ def _build_stubs() -> dict:
   for name in _FULL_MODE_ONLY_MODULES:
     stubs[name] = types.ModuleType(name)
 
-  # karaoke_workflows is imported inside helper functions at call-time.
-  # Stub it so any accidental import at module level doesn't fail.
-  kw = types.ModuleType("karaoke_workflows")
-  kw_lyrics = types.ModuleType("karaoke_workflows.lyrics")  # type: ignore[attr-defined]
-  # Provide defaults used by start_overlay(); tests that need different values
-  # (e.g. HAS_KOREAN_ROMANIZER=False) override these after fixture setup.
-  kw_lyrics.HAS_KOREAN_ROMANIZER = True
-  kw_lyrics.parse_lyrics_content = lambda lrc: []  # no lines → no Korean detected
-  kw_lyrics.romanize_korean = lambda text: None  # default stub: no romanization
-  stubs["karaoke_workflows"] = kw
-  stubs["karaoke_workflows.lyrics"] = kw_lyrics
-
   return stubs
 
 
@@ -70,7 +58,7 @@ def _purge_server_modules() -> None:
     if (
       name in _KARAOKE_SERVER_MODULES
       or name in _FULL_MODE_ONLY_MODULES
-      or name.startswith("karaoke_workflows")
+      or name.startswith("karaoke_lib")
     ):
       del sys.modules[name]
 

@@ -23,7 +23,7 @@ Web-based karaoke song manager and player. Downloads music videos from YouTube, 
 - **Frontend**: Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4, port 3002
 - **Backend**: FastAPI + SQLite (WAL mode) + uvicorn, port 8001
 - **System deps**: ffmpeg/ffprobe, demucs
-- **External**: yt-dlp (YouTube, **optional**), lrclib.net (lyrics), karaoke_workflows (local package at `workflows/karaoke`)
+- **External**: yt-dlp (YouTube, **optional**), lrclib.net (lyrics)
 
 ## Quick Start
 
@@ -57,7 +57,10 @@ frontends/karaoke/
 │   ├── db.py                 # SQLite abstraction — songs table with auto-migration (139 lines)
 │   ├── models.py             # Pydantic request/response models
 │   ├── demucs.py             # Demucs stem separation wrapper (htdemucs model)
-│   ├── overlay.py            # Bridges to karaoke_workflows.video.create_lyrics_overlay_video
+│   ├── overlay.py            # Lyrics overlay rendering (progress logger bridge)
+│   ├── karaoke_lib/          # Self-contained helpers folded from workflows/karaoke:
+│   │   ├── lyrics.py         #   LRC/SRT/VTT parsing + Korean romanization (HAS_KOREAN_ROMANIZER)
+│   │   └── video.py          #   create_lyrics_overlay_video (moviepy two-line overlay)
 │   ├── export.py             # Video export with mixed audio
 │   ├── lrclib.py             # lrclib.net lyrics search via lrcup
 │   ├── ytdlp.py              # YouTube search + video/thumbnail download via yt-dlp
@@ -200,6 +203,10 @@ button). Without yt-dlp, YouTube search/download are hidden and the
 search/download endpoints return 409. Install it manually with
 `pip install -r server/requirements-ytdlp.txt` to re-enable YouTube features.
 
-## External Dependency: karaoke_workflows
+## Bundled karaoke_lib package
 
-The backend depends on `workflows/karaoke` (installed as editable package `-e ../../../workflows/karaoke`). This package provides `karaoke_workflows.video.create_lyrics_overlay_video`. If overlay rendering breaks, check that package first.
+Lyrics parsing/romanization and overlay rendering live in `server/karaoke_lib/`,
+folded in from the former `workflows/karaoke` (`karaoke_workflows`) dependency so
+the project is fully self-contained (no `-e ../../../` path deps). The upstream
+`workflows/karaoke` package still exists in the monorepo but the server no longer
+imports it. If overlay rendering breaks, check `server/karaoke_lib/video.py` first.
