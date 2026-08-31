@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -72,6 +72,17 @@ THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 # All supported pitch/vocal combinations for pre-generated audio variants
 VARIANT_PITCHES = [-3, -2, -1, 0, 1, 2, 3]
 VARIANT_VOCALS = [0, 25, 100]  # percent
+
+# Video extensions accepted for manual import (defaulted to .mp4 for others)
+VIDEO_EXTS = {
+  ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v",
+  ".flv", ".ts", ".wmv", ".mpg", ".mpeg", ".ogv", ".3gp", ".mts",
+}
+
+
+def _safe_video_ext(filename: str) -> str:
+  ext = Path(filename).suffix.lower()
+  return ext if ext in VIDEO_EXTS else ".mp4"
 
 # ── Bulk operation runtime state ──────────────────────────────────────────────
 _bulk_runtime: dict = {
@@ -323,7 +334,7 @@ def serve_video(song_id: str, variant: str):
   if not path.exists():
     raise HTTPException(status_code=404, detail="Video file not found")
 
-  return FileResponse(path, media_type="video/mp4")
+  return FileResponse(path)
 
 
 @app.get("/api/songs/{song_id}/thumbnail")
@@ -412,6 +423,49 @@ def add_song(req: AddSongRequest):
   thread = threading.Thread(
     target=_download_worker,
     args=(song_id, req.url, VIDEOS_DIR / video_filename),
+    daemon=True,
+  )
+  thread.start()
+
+  return song
+
+
+@write_router.post("/api/songs/import", response_model=Song, status_code=201)
+def import_song(
+  file: UploadFile = File(...),
+  title: str | None = Form(None),
+  artist: str | None = Form(None),
+):
+  """Import a local video file into the library (no yt-dlp required)."""
+  song_id = uuid.uuid4().hex[:12]
+  original_name = file.filename or "imported"
+  video_filename = f"{song_id}{_safe_video_ext(original_name)}"
+
+  try:
+    output_path = VIDEOS_DIR / video_filename
+    with output_path.open("wb") as out:
+      shutil.copyfileobj(file.file, out)
+  except Exception as e:
+    raise HTTPException(status_code=400, detail=f"Failed to store upload: {e}")
+  finally:
+    file.file.close()
+
+  song = db.insert_song(
+    {
+      "id": song_id,
+      "title": title or Path(original_name).stem or "Imported video",
+      "artist": artist or "Unknown artist",
+      "duration": 0.0,
+      "source_url": original_name,
+      "video_filename": video_filename,
+      "thumbnail_url": None,
+      "status": "downloading",
+    }
+  )
+
+  thread = threading.Thread(
+    target=_import_worker,
+    args=(song_id, output_path),
     daemon=True,
   )
   thread.start()
@@ -1861,6 +1915,46 @@ def _generate_thumbnail(song_id: str, video_path: Path) -> None:
     log.warning(
       f"Thumbnail failed for {song_id}: {result.stderr.decode(errors='replace')[-200:]}"
     )
+
+
+def _import_worker(song_id: str, output_path: Path) -> None:
+  """Finalize an imported video: probe duration, mark ready, extract thumbnail."""
+  log.info(f"Import finalize started: {song_id}")
+  try:
+    import subprocess as _sp
+
+    probe = _sp.run(
+      [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        str(output_path),
+      ],
+      capture_output=True,
+      timeout=30,
+    )
+    duration = 0.0
+    if probe.returncode == 0:
+      import json
+
+      try:
+        duration = float(json.loads(probe.stdout)["format"]["duration"])
+      except (KeyError, ValueError, json.JSONDecodeError):
+        pass
+    else:
+      raise RuntimeError(
+        f"Not a playable video: {probe.stderr.decode(errors='replace')[-300:]}"
+      )
+
+    db.update_song(song_id, status="ready", duration=duration)
+    log.info(f"Import complete: {song_id}")
+    _generate_thumbnail(song_id, output_path)
+  except Exception as e:
+    db.update_song(song_id, status="error", error_message=str(e)[:500])
+    log.error(f"Import failed for {song_id}: {e}")
 
 
 def _download_worker(song_id: str, url: str, output_path: Path) -> None:

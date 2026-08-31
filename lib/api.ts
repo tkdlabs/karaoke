@@ -54,6 +54,28 @@ export async function addSong(req: AddSongRequest): Promise<Song> {
   });
 }
 
+export async function importVideo(
+  file: File,
+  title?: string,
+  artist?: string
+): Promise<Song> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) formData.append("title", title);
+  if (artist) formData.append("artist", artist);
+  const response = await fetch(`${API_BASE}/api/songs/import`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Import failed" }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function deleteSong(id: string): Promise<void> {
   await fetchApi(`/api/songs/${id}`, { method: "DELETE" });
 }

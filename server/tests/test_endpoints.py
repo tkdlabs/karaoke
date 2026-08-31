@@ -535,6 +535,81 @@ class TestFullMode:
       )
     assert resp.status_code != 405
 
+  # -- POST /api/songs/import ------------------------------------------------
+
+  def test_import_song_creates_song_and_returns_201(
+    self, full_mode_client: TestClient
+  ) -> None:
+    with patch("threading.Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/songs/import",
+        files={"file": ("cool clip.mp4", b"\x00" * 8, "video/mp4")},
+        data={"title": "Imported Title", "artist": "Imported Artist"},
+      )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["title"] == "Imported Title"
+    assert body["artist"] == "Imported Artist"
+    assert body["source_url"] == "cool clip.mp4"
+    assert body["status"] == "downloading"
+    assert body["video_filename"].endswith(".mp4")
+    assert "id" in body
+
+  def test_import_song_defaults_title_from_filename(
+    self, full_mode_client: TestClient
+  ) -> None:
+    with patch("threading.Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/songs/import",
+        files={"file": ("my cool song.webm", b"\x00" * 8, "video/webm")},
+      )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["title"] == "my cool song"
+    assert body["artist"] == "Unknown artist"
+    assert body["video_filename"].endswith(".webm")
+
+  def test_import_song_saves_video_file_to_disk(
+    self, full_mode_client: TestClient
+  ) -> None:
+    data_dir = _data_dir_from_client(full_mode_client)
+    with patch("threading.Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/songs/import",
+        files={"file": ("clip.mkv", b"streaming-data-here", "video/x-matroska")},
+      )
+    assert resp.status_code == 201
+    video_path = data_dir / "videos" / resp.json()["video_filename"]
+    assert video_path.exists()
+    assert video_path.read_bytes() == b"streaming-data-here"
+
+  def test_import_song_unknown_extension_defaults_to_mp4(
+    self, full_mode_client: TestClient
+  ) -> None:
+    with patch("threading.Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/songs/import",
+        files={"file": ("clip.xyz", b"\x00" * 4, "application/octet-stream")},
+      )
+    assert resp.status_code == 201
+    assert resp.json()["video_filename"].endswith(".mp4")
+
+  def test_import_song_requires_file_field(self, full_mode_client: TestClient) -> None:
+    resp = full_mode_client.post("/api/songs/import", data={"title": "Song"})
+    assert resp.status_code == 422
+
+  def test_import_song_not_405_in_full_mode(self, full_mode_client: TestClient) -> None:
+    with patch("threading.Thread"):
+      resp = full_mode_client.post(
+        "/api/songs/import",
+        files={"file": ("clip.mp4", b"\x00" * 4, "video/mp4")},
+      )
+    assert resp.status_code != 405
+
   # -- DELETE /api/songs/{id} ------------------------------------------------
 
   def test_delete_song_404_when_not_found(self, full_mode_client: TestClient) -> None:
@@ -1145,6 +1220,17 @@ class TestServeMode:
         "duration": 100.0,
         "thumbnail_url": "",
       },
+    )
+    self._assert_write_blocked(resp)
+
+  # -- POST /api/songs/import ------------------------------------------------
+
+  def test_post_import_blocked_in_serve_mode(
+    self, serve_mode_client: TestClient
+  ) -> None:
+    resp = serve_mode_client.post(
+      "/api/songs/import",
+      files={"file": ("clip.mp4", b"\x00" * 4, "video/mp4")},
     )
     self._assert_write_blocked(resp)
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { searchVideos, listSongs, addSong, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail, startBulkStems, startBulkVariants, getBulkStatus, cancelBulk } from "@/lib/api";
+import { searchVideos, listSongs, addSong, importVideo, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail, startBulkStems, startBulkVariants, getBulkStatus, cancelBulk } from "@/lib/api";
 import type { BulkStatus } from "@/lib/api";
 import { SearchResults } from "@/components/SearchResults";
 import { SongLibrary } from "@/components/SongLibrary";
@@ -97,6 +97,11 @@ export default function Home() {
         return next;
       });
     }
+  };
+
+  const handleImport = async (file: File) => {
+    await importVideo(file);
+    await loadSongs();
   };
 
   const handleLyricsDelete = async (songId: string) => {
@@ -270,6 +275,7 @@ export default function Home() {
       <SongLibrary
         songs={songs}
         onDelete={handleDelete}
+        onImport={handleImport}
         onLyricsSearch={(song) => setLyricsSearchSong(song)}
         onLyricsDelete={handleLyricsDelete}
         onStartStems={handleStartStems}

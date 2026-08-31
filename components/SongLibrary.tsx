@@ -94,6 +94,7 @@ function variantsLabel(song: Song): { text: string; color: string } {
 interface SongLibraryProps {
   songs: Song[];
   onDelete: (id: string) => void;
+  onImport: (file: File) => Promise<void>;
   onLyricsSearch: (song: Song) => void;
   onLyricsDelete: (songId: string) => void;
   onStartStems: (songId: string, opts: { eq_match: boolean; exciter: boolean; passes: number }) => void;
@@ -120,6 +121,7 @@ interface SongLibraryProps {
 export function SongLibrary({
   songs,
   onDelete,
+  onImport,
   onLyricsSearch,
   onLyricsDelete,
   onStartStems,
@@ -152,13 +154,49 @@ export function SongLibrary({
   const [bulkExciter, setBulkExciter] = useState(false);
   const [bulkPasses, setBulkPasses] = useState(1);
   const [bulkClearExisting, setBulkClearExisting] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    try {
+      await onImport(file);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const importButton = (
+    <label
+      className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white cursor-pointer select-none ${
+        importing ? "opacity-60 cursor-wait" : ""
+      }`}
+    >
+      {importing ? "Importing..." : "Import video"}
+      <input
+        type="file"
+        accept="video/*,.mkv,.webm,.mov,.avi,.mp4,.m4v,.flv,.ts,.wmv,.mpg,.mpeg,.ogv,.3gp,.mts"
+        className="hidden"
+        disabled={importing}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleImport(file);
+          e.currentTarget.value = "";
+        }}
+      />
+    </label>
+  );
 
   if (songs.length === 0) {
     return (
       <div>
-        <h2 className="text-lg font-semibold mb-3">Library</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Library</h2>
+          {importButton}
+        </div>
         <p className="text-gray-500">
-          No songs yet. Search and add videos above.
+          No songs yet. Search and add videos above, or import your own file.
         </p>
       </div>
     );
@@ -166,9 +204,12 @@ export function SongLibrary({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-3">
-        Library ({songs.length})
-      </h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">
+          Library ({songs.length})
+        </h2>
+        {importButton}
+      </div>
       {/* Bulk Operations */}
       <div className="mb-4 rounded-lg bg-gray-800 p-3">
         <div className="flex flex-wrap items-center gap-3">
