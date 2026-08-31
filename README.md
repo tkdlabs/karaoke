@@ -1,34 +1,73 @@
-Frontend/backend for karaoke management.
+# Karaoke
 
-We should basically provide a database and additionally functionality of workflows/karaoke/remove_vocals.py and support using yt-dlp.
+Web-based karaoke song manager and player. Downloads music videos, separates
+audio stems, pre-generates pitch/vocal variants, renders synced lyrics
+overlays, and exports videos with a configurable vocal mix.
 
-The frontend should live in frontends/karaoke and it maintain a database of karaoke videos and allow:
+Streaming API is available for clients such as ExoPlayer/MediaPlayer (configurable
+vocal level, on-the-fly pitch shift, original or lyrics-overlay video stream).
 
-- *IMPLEMENTED* F3 Fetching/Searching videos using yt-dlp:
-  - Display search results, and allow fetching the original music video.
+**Features:**
+- YouTube search/download via yt-dlp (**optional**), or manual local-file import
+- Lyrics from lrclib.net (LRC), Korean romanization support, line-by-line timestamp editing
+- Stem separation with Demucs (vocals / instrumental)
+- 21 pitch×vocal variants per song (7 pitches × 3 vocal levels), pre-generated
+- Synced lyrics + romanized overlay videos, rendered client-side
+- Video export with configurable vocal mix percentage
 
-- *IMPLEMENTED* F4 Fetching/Searching lyrics files based on libLrc.
-  - Map them to the metadata containing the video.
+## Requirements
 
-- *IMPLEMENTED* F5 Store derived audio files from running demucs:
-  - Vocals, everything minus vocals.
+- Python 3.10+
+- Node.js 18+ (Next.js 16)
+- `ffmpeg` / `ffprobe`
+- **Optional:** `yt-dlp` binary for YouTube search/download
+- **Stems require a CUDA GPU and `torch`/`demucs`** (pulls in heavy CUDA deps);
+  everything else works without it
 
-- *IMPLEMENTED* F6 Render the lyrics on the downloaded video (no sound):
-  - Follow the logic of workflows/karaoke/remove_vocals.py
+## Quick Start
 
-- *IMPLEMENTED* F7 Download videos for export:
-  - With % of vocals mixed in (again follow workflows/karaoke/remove_vocals.py)
+```bash
+# Backend (port 8001)
+cd server
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
 
+# Frontend (port 3002, separate terminal)
+npm install
+npm run dev -- -p 3002
+```
 
-Additionally the backend should provide streaming API to use by eg. ExoPlayer or MediaPlayer.
-  - *IMPLEMENTED* F1: Streaming endpoint with configurable vocal level (3 presets) and video stream selection (original or lyrics overlay).
-  - *IMPLEMENTED* F2: On-the-fly pitch change (+-3 semitones) for the mixed audio, applied per chunk while streaming.
+Or run both with `./start.sh` (expects `server/.venv` to exist).
 
-Android TV client (target Android TV 11):
+## Enabling optional features
 
-- Uses the thumbnails and metadata from backend to display a grid display of songs to choose from.
-- Uses the same endpoints via ExoPlayer to play the pre-defined streams (video - lyrics by default), default pitch = 0, default voice config = configurable, but guide as default would be OK.
-- TV remote can change: voice support, pitch, turn on/off lyrics while playing.
+```bash
+# YouTube search/download (yt-dlp)
+pip install -r server/requirements-ytdlp.txt   # or install yt-dlp any other way
+
+# Korean romanization for lyrics overlays
+pip install korean_romanizer
+```
+
+## Environment Variables
+
+| Var | Default | Description |
+|-----|---------|-------------|
+| `PORT` | `8001` | Backend port |
+| `DATA_DIR` | `../data` (relative to `server/`) | Where videos/stems/DB are stored |
+| `DEMUCS_MODEL` | `htdemucs` | Demucs pretrained model (see license note below) |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | Backend URL used by the frontend |
+
+## Deploy
+
+For server deployment (systemd), backend-only mode, data dir relocation, ports,
+and service user, see `server/deploy.py`:
+
+```bash
+cd server && python deploy.py --help
+```
 
 ## License & responsible use
 
@@ -43,8 +82,44 @@ is non-commercial. For commercial use, a permissively-licensed separation model
 (e.g. Spleeter) is required. The active model is shown in the app UI and
 reported by `GET /api/health` as `stems_model`.
 
-**yt-dlp is optional** (see feature 39): search/download only work when the
-binary is installed. Without it, use "Import video" to add local files.
+**yt-dlp is optional**: search/download only work when the binary is installed.
+Without it, use "Import video" to add local files.
 
 **Media ownership:** you are responsible for the videos and lyrics you download
 and process, and for clearing rights to them before distribution.
+
+## API
+
+```
+GET  /api/health                        # {"status","ytdlp","stems_model"}
+GET  /api/capabilities                  # runtime caps incl. ytdlp + stems_model
+GET  /api/search?q=<query>              # YouTube search (409 without yt-dlp)
+GET  /api/songs                         # list all songs
+GET  /api/songs/{id}
+POST /api/songs                         # add song from YouTube
+POST /api/songs/import                  # import a local video file (no yt-dlp needed)
+DEL  /api/songs/{id}
+
+GET  /api/lyrics/search?q=<query>&duration=<sec>
+PUT  /api/songs/{id}/lyrics
+DEL  /api/songs/{id}/lyrics
+PUT  /api/songs/{id}/lyrics/adjust     # anchor-based timestamp shift
+
+POST /api/songs/{id}/stems              # Demucs separation (background)
+DEL  /api/songs/{id}/stems
+GET  /api/songs/{id}/audio/{stem}       # vocals|instrumental MP3
+
+POST /api/songs/{id}/variants           # generate 21 pitch×vocal variants
+DEL  /api/songs/{id}/variants
+GET  /api/songs/{id}/variants/{pitch}/{vocal}
+
+POST /api/songs/{id}/overlay            # render lyrics overlay videos
+DEL  /api/songs/{id}/overlay
+
+POST /api/songs/{id}/export             # export with vocal mix (background)
+DEL  /api/songs/{id}/export
+
+GET  /api/songs/{id}/video/{variant}    # original|overlay_lyrics|overlay_romanized
+GET  /api/songs/{id}/thumbnail
+POST /api/songs/{id}/thumbnail
+```

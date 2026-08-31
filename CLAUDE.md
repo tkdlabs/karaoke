@@ -1,4 +1,4 @@
-# frontends/karaoke — Agent Guide
+# karaoke — Agent Guide
 
 Web-based karaoke song manager and player. Downloads music videos from YouTube, separates audio stems with Demucs, pre-generates 21 pitch/vocal variants, renders synced lyrics overlays, and exports videos with configurable vocal mix.
 
@@ -37,7 +37,7 @@ npm install && npm run dev -- -p 3002
 ## Directory Layout
 
 ```
-frontends/karaoke/
+.
 ├── app/
 │   ├── page.tsx              # Main page — orchestrates all components, polls /api/songs every 3s
 │   ├── layout.tsx
@@ -58,7 +58,7 @@ frontends/karaoke/
 │   ├── models.py             # Pydantic request/response models
 │   ├── demucs.py             # Demucs stem separation wrapper (htdemucs model)
 │   ├── overlay.py            # Lyrics overlay rendering (progress logger bridge)
-│   ├── karaoke_lib/          # Self-contained helpers folded from workflows/karaoke:
+│   ├── karaoke_lib/          # Self-contained helpers (bundled, replaces former karaoke_workflows dep):
 │   │   ├── lyrics.py         #   LRC/SRT/VTT parsing + Korean romanization (HAS_KOREAN_ROMANIZER)
 │   │   └── video.py          #   create_lyrics_overlay_video (moviepy two-line overlay)
 │   ├── export.py             # Video export with mixed audio
@@ -182,7 +182,7 @@ Progress throttled to DB writes every 2s. On restart, stuck "processing" statuse
 | Modify player behavior | `components/SongPlayer.tsx` |
 | Change audio processing | `server/main.py` (_variants_worker, EQ/exciter logic) |
 | Change stem separation | `server/demucs.py` |
-| Change lyrics overlay | `server/overlay.py`, `workflows/karaoke/` |
+| Change lyrics overlay | `server/overlay.py`, `server/karaoke_lib/video.py` |
 | DB schema changes | `server/db.py` (add column + migration in `_migrate_db`) |
 | Change data file paths | `server/main.py` (DATA_DIR constants near top) |
 
@@ -206,7 +206,6 @@ search/download endpoints return 409. Install it manually with
 ## Bundled karaoke_lib package
 
 Lyrics parsing/romanization and overlay rendering live in `server/karaoke_lib/`,
-folded in from the former `workflows/karaoke` (`karaoke_workflows`) dependency so
-the project is fully self-contained (no `-e ../../../` path deps). The upstream
-`workflows/karaoke` package still exists in the monorepo but the server no longer
-imports it. If overlay rendering breaks, check `server/karaoke_lib/video.py` first.
+bundled into the server so the project is fully self-contained. The upstream
+`workflows/karaoke` package no longer needs to be installed.
+If overlay rendering breaks, check `server/karaoke_lib/video.py` first.
