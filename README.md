@@ -62,12 +62,17 @@ pip install korean_romanizer
 
 ## Deploy
 
-For server deployment (systemd), backend-only mode, data dir relocation, ports,
-and service user, see `server/deploy.py`:
+For server deployment (systemd, backend-only mode), data dir relocation, ports,
+and service user, see `deploy.py`:
 
 ```bash
-cd server && python deploy.py --help
+python deploy.py --help
+# or: ./deploy.sh --help
 ```
+
+Both a full deploy (frontend + backend via generated `start.sh`/`stop.sh`) and a
+serve-only systemd deploy (`--serve --host <server>`) are supported, locally or
+over SSH — the script is self-contained (Python stdlib only).
 
 ## License & responsible use
 
