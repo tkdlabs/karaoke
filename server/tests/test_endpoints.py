@@ -97,12 +97,32 @@ class TestBothModes:
   def test_health_returns_ok_in_full_mode(self, full_mode_client: TestClient) -> None:
     resp = full_mode_client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert isinstance(body["ytdlp"], bool)
 
   def test_health_returns_ok_in_serve_mode(self, serve_mode_client: TestClient) -> None:
     resp = serve_mode_client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert isinstance(body["ytdlp"], bool)
+
+  # -- GET /api/capabilities -------------------------------------------------
+
+  def test_capabilities_ytdlp_true_in_full_mode(
+    self, full_mode_client: TestClient
+  ) -> None:
+    resp = full_mode_client.get("/api/capabilities")
+    assert resp.status_code == 200
+    assert resp.json() == {"ytdlp": True}
+
+  def test_capabilities_ytdlp_false_in_serve_mode(
+    self, serve_mode_client: TestClient
+  ) -> None:
+    resp = serve_mode_client.get("/api/capabilities")
+    assert resp.status_code == 200
+    assert resp.json() == {"ytdlp": False}
 
   # -- GET /api/songs --------------------------------------------------------
 
@@ -479,6 +499,61 @@ class TestFullMode:
     ytdlp_mod.search = MagicMock(side_effect=RuntimeError("yt-dlp failed"))  # type: ignore[attr-defined]
     resp = full_mode_client.get("/api/search?q=test")
     assert resp.status_code == 502
+
+  # -- yt-dlp optional: absence guards ---------------------------------------
+
+  def test_search_409_when_ytdlp_unavailable(
+    self, full_mode_client: TestClient
+  ) -> None:
+    main_mod = sys.modules.get("main")
+    assert main_mod is not None
+    main_mod.HAS_YTDLP = False  # type: ignore[attr-defined]
+    resp = full_mode_client.get("/api/search?q=test")
+    assert resp.status_code == 409
+    assert "manual import" in resp.json()["detail"]
+
+  def test_add_song_409_when_ytdlp_unavailable(
+    self, full_mode_client: TestClient
+  ) -> None:
+    main_mod = sys.modules.get("main")
+    assert main_mod is not None
+    main_mod.HAS_YTDLP = False  # type: ignore[attr-defined]
+    resp = full_mode_client.post(
+      "/api/songs",
+      json={
+        "url": "https://youtube.com/watch?v=xyz",
+        "title": "Song",
+        "artist": "Artist",
+        "duration": 100.0,
+        "thumbnail_url": "",
+      },
+    )
+    assert resp.status_code == 409
+
+  def test_import_song_works_without_ytdlp(
+    self, full_mode_client: TestClient
+  ) -> None:
+    main_mod = sys.modules.get("main")
+    assert main_mod is not None
+    main_mod.HAS_YTDLP = False  # type: ignore[attr-defined]
+    with patch("threading.Thread") as mock_thread:
+      mock_thread.return_value = MagicMock()
+      resp = full_mode_client.post(
+        "/api/songs/import",
+        files={"file": ("clip.mp4", b"\x00" * 8, "video/mp4")},
+      )
+    assert resp.status_code == 201
+    assert resp.json()["video_filename"].endswith(".mp4")
+
+  def test_capabilities_reflects_runtime_probe(
+    self, full_mode_client: TestClient
+  ) -> None:
+    main_mod = sys.modules.get("main")
+    assert main_mod is not None
+    main_mod.HAS_YTDLP = False  # type: ignore[attr-defined]
+    resp = full_mode_client.get("/api/capabilities")
+    assert resp.status_code == 200
+    assert resp.json() == {"ytdlp": False}
 
   # -- POST /api/songs -------------------------------------------------------
 

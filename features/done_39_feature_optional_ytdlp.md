@@ -31,8 +31,8 @@ variants, lyrics, overlay, or export.
 - No changes to variants, export, player, or overlay
 
 ## Acceptance Criteria
-- [ ] App boots and all local features work with no `yt-dlp` on PATH
-- [ ] `/api/capabilities` and `/api/health` report `ytdlp: false` correctly
-- [ ] Search returns a clear error and is not shown in the UI when yt-dlp is missing
-- [ ] Imported songs (feature 38) run the full pipeline without yt-dlp
-- [ ] With yt-dlp present, search + download behave exactly as before
+- [x] App boots and all local features work with no `yt-dlp` on PATH
+- [x] `/api/capabilities` and `/api/health` report `ytdlp: false` correctly
+- [x] Search/add-song return 409 with a clear message when yt-dlp is missing; search UI is hidden
+- [x] Imported songs (feature 38) run the full pipeline without yt-dlp
+- [x] With yt-dlp present, search + download behave exactly as before

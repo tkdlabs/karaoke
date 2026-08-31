@@ -23,7 +23,7 @@ Web-based karaoke song manager and player. Downloads music videos from YouTube, 
 - **Frontend**: Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4, port 3002
 - **Backend**: FastAPI + SQLite (WAL mode) + uvicorn, port 8001
 - **System deps**: ffmpeg/ffprobe, demucs
-- **External**: yt-dlp (YouTube), lrclib.net (lyrics), karaoke_workflows (local package at `workflows/karaoke`)
+- **External**: yt-dlp (YouTube, **optional**), lrclib.net (lyrics), karaoke_workflows (local package at `workflows/karaoke`)
 
 ## Quick Start
 
@@ -92,10 +92,12 @@ frontends/karaoke/
 
 ```
 GET  /api/health
-GET  /api/search?q=<query>                          # YouTube search via yt-dlp
+GET  /api/capabilities                              # runtime caps: {"ytdlp": bool} — drives optional search UI
+GET  /api/search?q=<query>                          # YouTube search via yt-dlp (409 if yt-dlp not installed)
 GET  /api/songs                                     # list all songs
 GET  /api/songs/{id}                                # single song
-POST /api/songs                                     # add song (triggers download background thread)
+POST /api/songs                                     # add song from YouTube (triggers download bg thread; 409 without yt-dlp)
+POST /api/songs/import                              # import a local video file (multipart, no yt-dlp required)
 DEL  /api/songs/{id}                                # delete song + all files
 
 GET  /api/lyrics/search?q=<query>&duration=<sec>    # search lrclib.net
@@ -188,6 +190,14 @@ Progress throttled to DB writes every 2s. On restart, stuck "processing" statuse
 | `DATA_DIR` | `../data` (relative to `server/`) | `server/main.py` |
 | `PORT` | `8001` | `server/main.py` / `start.sh` |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | `lib/api.ts` |
+
+## Optional yt-dlp
+
+yt-dlp is **optional**: the app detects it at startup (`HAS_YTDLP`) and works fully
+without it via manual video import (`POST /api/songs/import`, "Import video"
+button). Without yt-dlp, YouTube search/download are hidden and the
+search/download endpoints return 409. Install it manually with
+`pip install -r server/requirements-ytdlp.txt` to re-enable YouTube features.
 
 ## External Dependency: karaoke_workflows
 

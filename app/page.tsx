@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { searchVideos, listSongs, addSong, importVideo, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail, startBulkStems, startBulkVariants, getBulkStatus, cancelBulk } from "@/lib/api";
+import { searchVideos, listSongs, addSong, importVideo, getCapabilities, deleteSong, deleteSongLyrics, startStems, deleteStems, startExport, deleteExport, getExportDownloadUrl, startOverlay, deleteOverlay, getOverlayDownloadUrl, startVariants, deleteVariants, getVideoUrl, getThumbnailUrl, regenerateThumbnail, startBulkStems, startBulkVariants, getBulkStatus, cancelBulk } from "@/lib/api";
 import type { BulkStatus } from "@/lib/api";
 import { SearchResults } from "@/components/SearchResults";
 import { SongLibrary } from "@/components/SongLibrary";
@@ -33,6 +33,7 @@ export default function Home() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [lyricsSearchSong, setLyricsSearchSong] = useState<Song | null>(null);
   const [bulkStatus, setBulkStatus] = useState<BulkStatus | null>(null);
+  const [ytdlpAvailable, setYtdlpAvailable] = useState<boolean | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSongs = useCallback(async () => {
@@ -56,6 +57,13 @@ export default function Home() {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [loadSongs]);
+
+  // Detect runtime capabilities (yt-dlp optional) so search UI can hide
+  useEffect(() => {
+    getCapabilities()
+      .then((c) => setYtdlpAvailable(c.ytdlp))
+      .catch(() => setYtdlpAvailable(null));
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,33 +251,45 @@ export default function Home() {
   return (
     <div className="space-y-8">
       {/* Search */}
-      <form onSubmit={handleSearch} className="flex gap-3">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a song or music video..."
-          className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-        />
-        <button
-          type="submit"
-          disabled={isSearching || !query.trim()}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
-        >
-          {isSearching ? "Searching..." : "Search"}
-        </button>
-      </form>
+      {ytdlpAvailable !== false && (
+        <form onSubmit={handleSearch} className="flex gap-3">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search for a song or music video..."
+            className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+          />
+          <button
+            type="submit"
+            disabled={isSearching || !query.trim()}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+          >
+            {isSearching ? "Searching..." : "Search"}
+          </button>
+        </form>
+      )}
+
+      {ytdlpAvailable === false && (
+        <p className="text-gray-400 text-sm">
+          yt-dlp is not installed, so YouTube search is disabled. Use{" "}
+          <span className="text-emerald-400">Import video</span> in the library to add your
+          own files.
+        </p>
+      )}
 
       {searchError && (
         <p className="text-red-400 text-sm">{searchError}</p>
       )}
 
       {/* Search Results */}
-      <SearchResults
-        results={searchResults}
-        addingSongs={addingSongs}
-        onAdd={handleAdd}
-      />
+      {ytdlpAvailable !== false && (
+        <SearchResults
+          results={searchResults}
+          addingSongs={addingSongs}
+          onAdd={handleAdd}
+        />
+      )}
 
       {/* Song Library */}
       <SongLibrary

@@ -2,6 +2,5 @@ fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.0.0
 python-multipart
-yt-dlp
 lrcup
 -e ../../../workflows/karaoke[korean]

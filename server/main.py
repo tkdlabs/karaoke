@@ -48,6 +48,9 @@ if not SERVE_MODE:
   import overlay as overlay_mod
   import ytdlp
 
+# yt-dlp is optional: search/download are enabled only when the binary exists.
+HAS_YTDLP = shutil.which("yt-dlp") is not None
+
 app = FastAPI(title="Karaoke API", version="0.1.0")
 
 # Routes registered here are only included in `app` in full mode (see bottom of file).
@@ -154,7 +157,13 @@ def startup():
 
 @app.get("/api/health")
 def health():
-  return {"status": "ok"}
+  return {"status": "ok", "ytdlp": HAS_YTDLP}
+
+
+@app.get("/api/capabilities")
+def capabilities():
+  """Runtime capabilities advertised to the frontend (feature detection)."""
+  return {"ytdlp": HAS_YTDLP}
 
 
 @app.get("/api/songs", response_model=list[Song])
@@ -395,6 +404,11 @@ def bulk_status():
 @write_router.get("/api/search", response_model=list[SearchResult])
 def search_videos(q: str = Query(..., min_length=1)):
   """Search YouTube for videos via yt-dlp."""
+  if not HAS_YTDLP:
+    raise HTTPException(
+      status_code=409,
+      detail="yt-dlp is not installed — use manual import to add your own video files.",
+    )
   try:
     return ytdlp.search(q)
   except Exception as e:
@@ -404,6 +418,11 @@ def search_videos(q: str = Query(..., min_length=1)):
 @write_router.post("/api/songs", response_model=Song, status_code=201)
 def add_song(req: AddSongRequest):
   """Add a song to the library and start downloading."""
+  if not HAS_YTDLP:
+    raise HTTPException(
+      status_code=409,
+      detail="yt-dlp is not installed — use manual import to add your own video files.",
+    )
   song_id = uuid.uuid4().hex[:12]
   video_filename = f"{song_id}.mp4"
 
@@ -1959,6 +1978,13 @@ def _import_worker(song_id: str, output_path: Path) -> None:
 
 def _download_worker(song_id: str, url: str, output_path: Path) -> None:
   """Background worker to download a video."""
+  if not HAS_YTDLP:
+    db.update_song(
+      song_id,
+      status="error",
+      error_message="yt-dlp is not installed — use manual import to add your own video files.",
+    )
+    return
   log.info(f"Download started: {song_id} {url}")
   try:
     ytdlp.download(url, output_path)

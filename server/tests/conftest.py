@@ -129,6 +129,9 @@ def full_mode_client(tmp_path: Path) -> Generator[TestClient, None, None]:
   data_dir.mkdir()
 
   main_mod = _load_app(serve_mode=False, data_dir=data_dir, stubs=stubs)
+  # Simulate a machine with yt-dlp installed so download/search tests exercise
+  # the happy path; tests that need it absent override this per-test.
+  main_mod.HAS_YTDLP = True  # type: ignore[attr-defined]
 
   with TestClient(main_mod.app, raise_server_exceptions=True) as client:
     yield client
@@ -149,6 +152,8 @@ def serve_mode_client(tmp_path: Path) -> Generator[TestClient, None, None]:
   data_dir.mkdir()
 
   main_mod = _load_app(serve_mode=True, data_dir=data_dir, stubs=stubs)
+  # Serve mode is the lean deployment; simulate a box without yt-dlp.
+  main_mod.HAS_YTDLP = False  # type: ignore[attr-defined]
 
   with TestClient(main_mod.app, raise_server_exceptions=True) as client:
     yield client

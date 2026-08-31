@@ -39,6 +39,14 @@ export async function searchVideos(query: string): Promise<SearchResult[]> {
   return fetchApi(`/api/search?q=${encodeURIComponent(query)}`);
 }
 
+export interface Capabilities {
+  ytdlp: boolean;
+}
+
+export async function getCapabilities(): Promise<Capabilities> {
+  return fetchApi("/api/capabilities");
+}
+
 export async function listSongs(): Promise<Song[]> {
   return fetchApi("/api/songs");
 }
