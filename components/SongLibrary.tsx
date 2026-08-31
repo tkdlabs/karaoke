@@ -20,6 +20,18 @@ const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   error: { label: "Error", color: "text-red-400" },
 };
 
+// All Demucs-family models are trained on MUSDB18 → weights are CC-BY-NC 4.0
+// (non-commercial). If a permissive separation backend is ever wired in
+// (e.g. Spleeter), drop the model name from this set.
+const NON_COMMERCIAL_STEM_MODELS = new Set([
+  "htdemucs",
+  "htdemucs_ft",
+  "htdemucs_6s",
+  "htdemucs_be",
+  "mdx_extra",
+  "mdx_extra_q",
+]);
+
 function lyricsLabel(song: Song): { text: string; color: string } {
   if (song.lyrics_synced) return { text: "Synced", color: "text-green-400" };
   if (song.lyrics_plain) return { text: "Plain", color: "text-yellow-400" };
@@ -112,6 +124,7 @@ interface SongLibraryProps {
   getThumbnailUrl: (songId: string) => string;
   deletingIds: Set<string>;
   onSongsRefresh: () => void;
+  stemsModel: string | null;
   bulkStatus: BulkStatus | null;
   onStartBulkStems: (opts: { eq_match: boolean; exciter: boolean; passes: number; clear_existing: boolean }) => void;
   onStartBulkVariants: (opts: { eq_match: boolean; exciter: boolean; passes: number; clear_existing: boolean }) => void;
@@ -139,6 +152,7 @@ export function SongLibrary({
   getThumbnailUrl,
   deletingIds,
   onSongsRefresh,
+  stemsModel,
   bulkStatus,
   onStartBulkStems,
   onStartBulkVariants,
@@ -476,6 +490,14 @@ export function SongLibrary({
                             Passes: {passesFlags[song.id] ?? 1}
                           </label>
                         </>
+                      )}
+                      {stemsModel && NON_COMMERCIAL_STEM_MODELS.has(stemsModel) && (
+                        <span
+                          className="basis-full text-[10px] text-gray-500"
+                          title="Demucs model weights are trained on MUSDB18 and licensed CC-BY-NC 4.0 (non-commercial)"
+                        >
+                          Stems: {stemsModel} weights are CC-BY-NC (non-commercial)
+                        </span>
                       )}
                     </>
                   )}

@@ -29,3 +29,22 @@ Android TV client (target Android TV 11):
 - Uses the thumbnails and metadata from backend to display a grid display of songs to choose from.
 - Uses the same endpoints via ExoPlayer to play the pre-defined streams (video - lyrics by default), default pitch = 0, default voice config = configurable, but guide as default would be OK.
 - TV remote can change: voice support, pitch, turn on/off lyrics while playing.
+
+## License & responsible use
+
+This project is MIT-licensed (see `LICENSE`). Third-party dependencies and
+pretrained weights carry their own terms — see `THIRD_PARTY_NOTICES.md`.
+
+**Non-commercial stems:** the default Demucs `htdemucs` pretrained weights are
+CC-BY-NC 4.0 (trained on research-only MUSDB18 data). Using stems separation
+**commercially violates the weights license**. You can switch models with the
+`DEMUCS_MODEL` env var (e.g. `htdemucs_ft`), but every Demucs-family checkpoint
+is non-commercial. For commercial use, a permissively-licensed separation model
+(e.g. Spleeter) is required. The active model is shown in the app UI and
+reported by `GET /api/health` as `stems_model`.
+
+**yt-dlp is optional** (see feature 39): search/download only work when the
+binary is installed. Without it, use "Import video" to add local files.
+
+**Media ownership:** you are responsible for the videos and lyrics you download
+and process, and for clearing rights to them before distribution.

@@ -30,6 +30,12 @@ that should be documented. The repo currently has no LICENSE file at all.
 - Repo: `LICENSE`, `THIRD_PARTY_NOTICES.md`, README section
 - No functional changes to stems separation, variants, export, player, or overlay
 
+## Follow-up (out of scope for this feature)
+An engine abstraction (`STEM_ENGINE` env) that swaps in a permissively-licensed
+separation backend — Spleeter (Deezer, MIT weights) is the realistic candidate;
+open-unmix weights are also non-commercial. Spleeter pulls TensorFlow, so it
+would run in a nested venv or Docker rather than the main venv.
+
 ## Acceptance Criteria
 - [ ] `DEMUCS_MODEL` env var selects the Demucs model; default remains `htdemucs`
 - [ ] `/api/health` reports the active model; disclaimer shown in stems UI

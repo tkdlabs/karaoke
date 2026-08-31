@@ -41,6 +41,7 @@ export async function searchVideos(query: string): Promise<SearchResult[]> {
 
 export interface Capabilities {
   ytdlp: boolean;
+  stems_model: string;
 }
 
 export async function getCapabilities(): Promise<Capabilities> {

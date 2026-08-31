@@ -91,8 +91,8 @@ frontends/karaoke/
 ## API Endpoints (server/main.py)
 
 ```
-GET  /api/health
-GET  /api/capabilities                              # runtime caps: {"ytdlp": bool} — drives optional search UI
+GET  /api/health                                     # {"status","ytdlp","stems_model"}
+GET  /api/capabilities                              # runtime caps: {"ytdlp": bool, "stems_model": str} — optional search UI + stems badge
 GET  /api/search?q=<query>                          # YouTube search via yt-dlp (409 if yt-dlp not installed)
 GET  /api/songs                                     # list all songs
 GET  /api/songs/{id}                                # single song
@@ -189,6 +189,7 @@ Progress throttled to DB writes every 2s. On restart, stuck "processing" statuse
 |-----|---------|---------|
 | `DATA_DIR` | `../data` (relative to `server/`) | `server/main.py` |
 | `PORT` | `8001` | `server/main.py` / `start.sh` |
+| `DEMUCS_MODEL` | `htdemucs` | `server/demucs.py` + `/api/health` `stems_model` — all Demucs weights are CC-BY-NC (see `THIRD_PARTY_NOTICES.md`) |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | `lib/api.ts` |
 
 ## Optional yt-dlp

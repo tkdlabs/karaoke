@@ -51,6 +51,9 @@ if not SERVE_MODE:
 # yt-dlp is optional: search/download are enabled only when the binary exists.
 HAS_YTDLP = shutil.which("yt-dlp") is not None
 
+# Active Demucs stem-separation model (see demucs.DEFAULT_MODEL and THIRD_PARTY_NOTICES.md).
+STEMS_MODEL = os.environ.get("DEMUCS_MODEL", "htdemucs")
+
 app = FastAPI(title="Karaoke API", version="0.1.0")
 
 # Routes registered here are only included in `app` in full mode (see bottom of file).
@@ -157,13 +160,13 @@ def startup():
 
 @app.get("/api/health")
 def health():
-  return {"status": "ok", "ytdlp": HAS_YTDLP}
+  return {"status": "ok", "ytdlp": HAS_YTDLP, "stems_model": STEMS_MODEL}
 
 
 @app.get("/api/capabilities")
 def capabilities():
   """Runtime capabilities advertised to the frontend (feature detection)."""
-  return {"ytdlp": HAS_YTDLP}
+  return {"ytdlp": HAS_YTDLP, "stems_model": STEMS_MODEL}
 
 
 @app.get("/api/songs", response_model=list[Song])

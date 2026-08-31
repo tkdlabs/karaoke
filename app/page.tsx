@@ -34,6 +34,7 @@ export default function Home() {
   const [lyricsSearchSong, setLyricsSearchSong] = useState<Song | null>(null);
   const [bulkStatus, setBulkStatus] = useState<BulkStatus | null>(null);
   const [ytdlpAvailable, setYtdlpAvailable] = useState<boolean | null>(null);
+  const [stemsModel, setStemsModel] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSongs = useCallback(async () => {
@@ -61,7 +62,10 @@ export default function Home() {
   // Detect runtime capabilities (yt-dlp optional) so search UI can hide
   useEffect(() => {
     getCapabilities()
-      .then((c) => setYtdlpAvailable(c.ytdlp))
+      .then((c) => {
+        setYtdlpAvailable(c.ytdlp);
+        setStemsModel(c.stems_model);
+      })
       .catch(() => setYtdlpAvailable(null));
   }, []);
 
@@ -312,6 +316,7 @@ export default function Home() {
         getVideoUrl={getVideoUrl}
         getThumbnailUrl={getThumbnailUrl}
         deletingIds={deletingIds}
+        stemsModel={stemsModel}
         onSongsRefresh={loadSongs}
         bulkStatus={bulkStatus}
         onStartBulkStems={handleStartBulkStems}

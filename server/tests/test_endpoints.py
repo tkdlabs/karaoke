@@ -100,6 +100,7 @@ class TestBothModes:
     body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["ytdlp"], bool)
+    assert isinstance(body["stems_model"], str)
 
   def test_health_returns_ok_in_serve_mode(self, serve_mode_client: TestClient) -> None:
     resp = serve_mode_client.get("/api/health")
@@ -107,6 +108,7 @@ class TestBothModes:
     body = resp.json()
     assert body["status"] == "ok"
     assert isinstance(body["ytdlp"], bool)
+    assert isinstance(body["stems_model"], str)
 
   # -- GET /api/capabilities -------------------------------------------------
 
@@ -115,14 +117,14 @@ class TestBothModes:
   ) -> None:
     resp = full_mode_client.get("/api/capabilities")
     assert resp.status_code == 200
-    assert resp.json() == {"ytdlp": True}
+    assert resp.json() == {"ytdlp": True, "stems_model": "htdemucs"}
 
   def test_capabilities_ytdlp_false_in_serve_mode(
     self, serve_mode_client: TestClient
   ) -> None:
     resp = serve_mode_client.get("/api/capabilities")
     assert resp.status_code == 200
-    assert resp.json() == {"ytdlp": False}
+    assert resp.json() == {"ytdlp": False, "stems_model": "htdemucs"}
 
   # -- GET /api/songs --------------------------------------------------------
 
@@ -553,7 +555,7 @@ class TestFullMode:
     main_mod.HAS_YTDLP = False  # type: ignore[attr-defined]
     resp = full_mode_client.get("/api/capabilities")
     assert resp.status_code == 200
-    assert resp.json() == {"ytdlp": False}
+    assert resp.json() == {"ytdlp": False, "stems_model": "htdemucs"}
 
   # -- POST /api/songs -------------------------------------------------------
 

@@ -4,11 +4,16 @@ Extracts audio from video, runs demucs, and produces vocals + instrumental files
 Reuses logic from workflows/karaoke/audio.py.
 """
 
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# Active Demucs model, overridable via DEMUCS_MODEL (all Demucs family weights
+# are CC-BY-NC 4.0 — see THIRD_PARTY_NOTICES.md).
+DEFAULT_MODEL = os.environ.get("DEMUCS_MODEL", "htdemucs")
 
 
 def extract_audio(video_path: Path, audio_path: Path) -> None:
@@ -23,7 +28,7 @@ def extract_audio(video_path: Path, audio_path: Path) -> None:
     subprocess.run(cmd, check=True, capture_output=True)
 
 
-def run_demucs(input_path: Path, output_dir: Path, model: str = "htdemucs") -> Path:
+def run_demucs(input_path: Path, output_dir: Path, model: str = DEFAULT_MODEL) -> Path:
     """Run demucs and return the stems directory."""
     # Use the demucs binary co-located with our Python interpreter.
     # We avoid `sys.executable -m demucs` because the local server/demucs.py module
@@ -81,7 +86,7 @@ def separate(video_path: Path, vocals_out: Path, instrumental_out: Path) -> None
         extract_audio(video_path, wav_path)
 
         # Run demucs
-        stems_dir = run_demucs(wav_path, tmp_path)
+        stems_dir = run_demucs(wav_path, tmp_path, model=DEFAULT_MODEL)
 
         # Copy vocals
         vocals_stem = stems_dir / "vocals.mp3"
@@ -130,14 +135,14 @@ def separate_multipass(video_path: Path, vocals_out: Path, instrumental_out: Pat
         # --- Pass 1: original mix ---
         wav_path = tmp_path / "audio.wav"
         extract_audio(video_path, wav_path)
-        stems_dirs = [run_demucs(wav_path, tmp_path / "pass1")]
+        stems_dirs = [run_demucs(wav_path, tmp_path / "pass1", model=DEFAULT_MODEL)]
 
         # --- Additional passes: re-separate vocals from previous pass ---
         for p in range(2, passes + 1):
             prev_vocals = stems_dirs[-1] / "vocals.mp3"
             if not prev_vocals.exists():
                 raise FileNotFoundError(f"Pass {p - 1} vocals not found at {prev_vocals}")
-            stems_dirs.append(run_demucs(prev_vocals, tmp_path / f"pass{p}"))
+            stems_dirs.append(run_demucs(prev_vocals, tmp_path / f"pass{p}", model=DEFAULT_MODEL))
 
         # --- Combine per-instrument stems across all passes ---
         for stem_name in ("drums", "bass", "other"):
