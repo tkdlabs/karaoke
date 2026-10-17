@@ -405,8 +405,10 @@ def step_setup_venv(target: Target, cfg: Config) -> None:
     print("Setting up Python venv...")
     target.run(f"uv venv {venv}")
   req = "requirements-serve.txt" if cfg.no_frontend else "-e ."
+  # A requirements file needs `-r`; `-e .` is already a valid install spec.
+  req_args = f"-r {req}" if cfg.no_frontend else req
   print("Installing backend deps...")
-  target.run(f"uv pip install --python {python} {req}", cwd=cfg.backend_dir)
+  target.run(f"uv pip install --python {python} {req_args}", cwd=cfg.backend_dir)
 
 
 def step_install_npm(target: Target, cfg: Config) -> None:
@@ -513,7 +515,9 @@ def step_systemd_cmd(target: Target, cfg: Config, subcmd: str, skip_when_uninsta
     return
   print(f"Running systemctl {subcmd}...")
   svc = "karaoke-backend.service"
-  target.run(f"sudo systemctl {subcmd} {svc}")
+  # daemon-reload takes no unit argument (and NOPASSWD sudoers rules match it bare).
+  cmd = f"sudo systemctl {subcmd}" if subcmd == "daemon-reload" else f"sudo systemctl {subcmd} {svc}"
+  target.run(cmd)
 
 
 def step_systemd_summary(target: Target, cfg: Config) -> None:
