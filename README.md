@@ -15,6 +15,9 @@ vocal level, on-the-fly pitch shift, original or lyrics-overlay video stream).
 - Synced lyrics + romanized overlay videos, rendered client-side
 - Video export with configurable vocal mix percentage
 
+**Clients:**
+- [`tkdlabs/karaoke-tv`](https://github.com/tkdlabs/karaoke-tv) — Android TV client
+
 ## Requirements
 
 - Python 3.10+
